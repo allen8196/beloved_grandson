@@ -85,95 +85,35 @@
 }
 ```
 
-## 3. 對話管理 (`/api/conversations`)
+## 3. 對話與任務管理
 
-用於建立和管理對話的端點。
+管理非同步對話任務的提交與查詢。
 
-### 建立新的對話任務
+### 提交對話訊息任務
 
 - **端點:** `POST /api/conversations`
 - **方法:** `POST`
-- **描述:** 透過提交一個音訊檔案來發起新的對話。這會為 AI Worker 建立一個非同步任務進行處理。
+- **描述:** 提交一個包含音訊檔案的對話訊息任務。此端點會立即將任務發布至訊息佇列供 AI Worker 處理，並返回一個唯一的任務 ID。如果未提供 `conversation_id`，AI Worker 將會建立一個全新的對話。
 - **身份驗證:** 需要 (`Bearer Token`)。
 - **請求主體:** `multipart/form-data`
 
 | 參數 | 類型 | 描述 |
 | :--- | :--- | :--- |
 | `audio_file` | `file` | 使用者輸入的音訊檔案（例如 `.wav`, `.mp3`）。 |
-| `conversation_id` | `string` | （可選）現有對話的 ID，用於繼續對話。如果省略，將會建立一個新的對話。 |
+| `conversation_id` | `string` | （可選）現有對話的 ID，用於在該對話中新增訊息。 |
 
-- **回應範例 (成功 `202`):**
+- **回應範例 (成功 `202 Accepted`):**
 ```json
 {
   "task_id": "f1g2h3i4-j5k6-7890-1234-567890lmnpqr"
 }
 ```
 
-### 列出使用者對話
-
-- **端點:** `GET /api/conversations`
-- **方法:** `GET`
-- **描述:** 檢索已驗證使用者的所有對話列表。
-- **身份驗證:** 需要 (`Bearer Token`)。
-- **回應範例 (成功 `200`):**
-```json
-[
-  {
-    "id": "c1d2e3f4-g5h6-7890-1234-567890ijklmn",
-    "user_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
-    "title": "My First Conversation",
-    "created_at": "2023-10-27T10:05:00Z",
-    "updated_at": "2023-10-27T10:15:00Z"
-  }
-]
-```
-
-### 獲取特定對話
-
-- **端點:** `GET /api/conversations/{conversation_id}`
-- **方法:** `GET`
-- **描述:** 檢索單一對話，包含其所有訊息。
-- **身份驗證:** 需要 (`Bearer Token`)。
-- **URL 參數:**
-
-| 參數 | 類型 | 描述 |
-| :--- | :--- | :--- |
-| `conversation_id` | `string` | 對話的 UUID。 |
-
-- **回應範例 (成功 `200`):**
-```json
-{
-  "id": "c1d2e3f4-g5h6-7890-1234-567890ijklmn",
-  "title": "My First Conversation",
-  "created_at": "2023-10-27T10:05:00Z",
-  "messages": [
-    {
-      "id": "m1n2o3p4-q5r6-7890-1234-567890stuvwx",
-      "sender_type": "USER",
-      "text_content": "Hello, what is the weather like today?",
-      "audio_input_url": "https://storage.googleapis.com/your-bucket/audio_input/abc.wav",
-      "created_at": "2023-10-27T10:05:10Z"
-    },
-    {
-      "id": "x1y2z3a4-b5c6-7890-1234-567890defghi",
-      "sender_type": "AI",
-      "text_content": "The weather is sunny with a high of 25 degrees Celsius.",
-      "audio_output_url": "https://storage.googleapis.com/your-bucket/tts_output/xyz.mp3",
-      "created_at": "2023-10-27T10:05:15Z"
-    }
-  ]
-}
-```
-
-## 4. 任務狀態 (`/api/tasks`)
-
-用於檢查非同步任務狀態的端點。
-
 ### 獲取任務狀態與結果
 
 - **端點:** `GET /api/tasks/{task_id}`
 - **方法:** `GET`
-- **描述:** 使用從建立對話時獲取的 `task_id`，輪詢非同步 AI 任務的狀態和結果。
+- **描述:** 使用 `task_id` 輪詢非同步任務的狀態和結果。客戶端應持續查詢此端點，直到 `status` 變為 `SUCCESS` 或 `FAILURE`。
 - **身份驗證:** 需要 (`Bearer Token`)。
 - **URL 參數:**
 
@@ -181,35 +121,93 @@
 | :--- | :--- | :--- |
 | `task_id` | `string` | 任務的 UUID。 |
 
-- **回應範例 (處理中 `200`):**
+- **回應範例 (處理中 `200 OK`):**
 ```json
 {
   "status": "PROCESSING",
-  "result_type": null,
-  "data": null,
-  "error_message": null
+  "result": null
 }
 ```
 
-- **回應範例 (成功 `200`):**
+- **回應範例 (成功 `200 OK`):**
+  當任務成功完成後，`result` 物件會包含處理結果。如果這是一個新建立的對話，`conversation_id` 將會被回傳。
 ```json
 {
   "status": "SUCCESS",
-  "result_type": "tts_audio",
-  "data": {
-    "text_response": "This is the answer to your question.",
+  "result": {
+    "conversation_id": "c1d2e3f4-g5h6-7890-1234-567890ijklmn",
+    "text_response": "這是對您問題的回答。",
     "audio_output_url": "https://storage.googleapis.com/your-bucket/tts_output/xyz.mp3"
-  },
-  "error_message": null
+  }
 }
 ```
 
-- **回應範例 (失敗 `200`):**
+- **回應範例 (失敗 `200 OK`):**
 ```json
 {
   "status": "FAILURE",
-  "result_type": null,
-  "data": null,
-  "error_message": "Failed to process audio file."
+  "result": {
+    "error_message": "無法處理音訊檔案。"
+  }
+}
+```
+
+## 4. 對話歷史紀錄
+
+用於檢索已完成並儲存於資料庫中的對話歷史。
+
+### 列出使用者所有對話
+
+- **端點:** `GET /api/conversations`
+- **方法:** `GET`
+- **描述:** 檢索已驗證使用者的所有對話列表。此端點僅返回對話的摘要資訊。
+- **身份驗證:** 需要 (`Bearer Token`)。
+- **回應範例 (成功 `200 OK`):**
+```json
+[
+  {
+    "id": "c1d2e3f4-g5h6-7890-1234-567890ijklmn",
+    "user_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+    "title": "關於天氣的對話",
+    "created_at": "2023-10-27T10:05:00Z",
+    "updated_at": "2023-10-27T10:15:00Z"
+  }
+]
+```
+
+### 獲取特定對話的完整內容
+
+- **端點:** `GET /api/conversations/{conversation_id}`
+- **方法:** `GET`
+- **描述:** 檢索單一對話的完整歷史，包含其所有訊息。
+- **身份驗證:** 需要 (`Bearer Token`)。
+- **URL 參數:**
+
+| 參數 | 類型 | 描述 |
+| :--- | :--- | :--- |
+| `conversation_id` | `string` | 對話的 UUID。 |
+
+- **回應範例 (成功 `200 OK`):**
+```json
+{
+  "id": "c1d2e3f4-g5h6-7890-1234-567890ijklmn",
+  "title": "關於天氣的對話",
+  "created_at": "2023-10-27T10:05:00Z",
+  "messages": [
+    {
+      "id": "m1n2o3p4-q5r6-7890-1234-567890stuvwx",
+      "sender_type": "USER",
+      "text_content": "今天天氣如何？",
+      "audio_input_url": "https://storage.googleapis.com/your-bucket/audio_input/abc.wav",
+      "created_at": "2023-10-27T10:05:10Z"
+    },
+    {
+      "id": "x1y2z3a4-b5c6-7890-1234-567890defghi",
+      "sender_type": "AI",
+      "text_content": "天氣晴朗，氣溫攝氏25度。",
+      "audio_output_url": "https://storage.googleapis.com/your-bucket/tts_output/xyz.mp3",
+      "created_at": "2023-10-27T10:05:15Z"
+    }
+  ]
 }
 ```
