@@ -93,7 +93,7 @@
 
 - **端點:** `POST /api/conversations`
 - **方法:** `POST`
-- **描述:** 提交一個包含音訊檔案的對話訊息任務。此端點會立即將任務發布至訊息佇列供 AI Worker 處理，並返回一個唯一的任務 ID。如果未提供 `conversation_id`，系統將在任務處理完成後建立一個全新的對話。
+- **描述:** 提交一個包含音訊檔案的對話訊息任務。在此流程中，Web App 會先將上傳的 `audio_file` 存入 MinIO 物件儲存，然後將包含 MinIO 內部路徑的任務發布至訊息佇列供 AI Worker 處理，並立即返回一個唯一的任務 ID。如果未提供 `conversation_id`，系統將在任務處理完成後建立一個全新的對話。
 - **身份驗證:** 需要 (`Bearer Token`)。
 - **請求主體:** `multipart/form-data`
 
@@ -137,7 +137,7 @@
   "result": {
     "conversation_id": "c1d2e3f4-g5h6-7890-1234-567890ijklmn",
     "text_response": "這是對您問題的回答。",
-    "audio_output_url": "https://storage.googleapis.com/your-bucket/tts_output/xyz.mp3"
+    "audio_output_url": "/media/audio-outputs/xyz.mp3"
   }
 }
 ```
@@ -198,14 +198,14 @@
       "id": "m1n2o3p4-q5r6-7890-1234-567890stuvwx",
       "sender_type": "USER",
       "text_content": "今天天氣如何？",
-      "audio_input_url": "https://storage.googleapis.com/your-bucket/audio_input/abc.wav",
+      "audio_input_url": "/media/audio-inputs/abc.wav",
       "created_at": "2023-10-27T10:05:10Z"
     },
     {
       "id": "x1y2z3a4-b5c6-7890-1234-567890defghi",
       "sender_type": "AI",
       "text_content": "天氣晴朗，氣溫攝氏25度。",
-      "audio_output_url": "https://storage.googleapis.com/your-bucket/tts_output/xyz.mp3",
+      "audio_output_url": "/media/audio-outputs/xyz.mp3",
       "created_at": "2023-10-27T10:05:15Z"
     }
   ]
