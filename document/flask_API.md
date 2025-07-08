@@ -109,11 +109,11 @@
 }
 ```
 
-### 獲取任務狀態與結果
+### 獲取任務狀態與結果 (備用機制)
 
 - **端點:** `GET /api/tasks/{task_id}`
 - **方法:** `GET`
-- **描述:** 使用 `task_id` 輪詢非同步任務的狀態和結果。客戶端應持續查詢此端點，直到 `status` 變為 `SUCCESS` 或 `FAILURE`。
+- **描述:** 使用 `task_id` 查詢非同步任務的最終結果。此端點主要作為 WebSocket 連線失敗或中斷時的**備用查詢機制**，不建議用於高頻率輪詢。
 - **身份驗證:** 需要 (`Bearer Token`)。
 - **URL 參數:**
 
@@ -143,6 +143,49 @@
 ```
 
 - **回應範例 (失敗 `200 OK`):**
+```json
+{
+  "status": "FAILURE",
+  "result": {
+    "error_message": "無法處理音訊檔案。"
+  }
+}
+```
+
+### 即時結果通知 (WebSocket)
+
+為了提供即時的任務結果更新，系統採用 WebSocket 協定。客戶端在提交任務後，應使用獲取的 `task_id` 建立一個 WebSocket 連線，以非同步接收最終結果，從而避免了傳統 HTTP 輪詢的延遲與資源浪費。
+
+- **端點:** `ws://<your-server-address>/ws/tasks/{task_id}`
+- **描述:** 建立一個與特定任務 (`task_id`) 綁定的 WebSocket 連線。當該任務完成時，伺服器會透過此連線主動推送一次最終結果，然後關閉連線。
+- **URL 參數:**
+
+| 參數 | 類型 | 描述 |
+| :--- | :--- | :--- |
+| `task_id` | `string` | 任務的 UUID，用於識別要監聽的任務。 |
+
+- **流程說明:**
+    1.  客戶端 `POST /api/conversations` 並獲得 `task_id`。
+    2.  客戶端立即使用此 `task_id` 初始化 WebSocket 連線。
+    3.  連線建立後，客戶端進入等待狀態。
+    4.  當後端 `AI Worker` 完成任務並將結果傳回 `Web App` 後，`Web App` 會將結果整理成 JSON 格式。
+    5.  `Web App` 透過對應的 WebSocket 通道，將 JSON 結果推送給客戶端。
+    6.  推送完成後，伺服器會主動關閉該 WebSocket 連線。
+
+- **伺服器推送訊息範例 (成功):**
+  伺服器推送的訊息格式與 `GET /api/tasks/{task_id}` 的成功回應格式完全相同。
+```json
+{
+  "status": "SUCCESS",
+  "result": {
+    "conversation_id": "c1d2e3f4-g5h6-7890-1234-567890ijklmn",
+    "text_response": "這是對您問題的回答。",
+    "audio_output_url": "/media/audio-outputs/xyz.mp3"
+  }
+}
+```
+
+- **伺服器推送訊息範例 (失敗):**
 ```json
 {
   "status": "FAILURE",
