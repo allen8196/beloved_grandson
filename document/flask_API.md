@@ -93,7 +93,7 @@
 
 - **端點:** `POST /api/conversations`
 - **方法:** `POST`
-- **描述:** 提交一個包含音訊檔案的對話訊息任務。此端點會立即將任務發布至訊息佇列供 AI Worker 處理，並返回一個唯一的任務 ID。如果未提供 `conversation_id`，AI Worker 將會建立一個全新的對話。
+- **描述:** 提交一個包含音訊檔案的對話訊息任務。此端點會立即將任務發布至訊息佇列供 AI Worker 處理，並返回一個唯一的任務 ID。如果未提供 `conversation_id`，系統將在任務處理完成後建立一個全新的對話。
 - **身份驗證:** 需要 (`Bearer Token`)。
 - **請求主體:** `multipart/form-data`
 
