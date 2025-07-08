@@ -11,14 +11,22 @@ services:
     image: postgres:15-alpine
     container_name: postgres_db
     environment:
-      - POSTGRES_USER=admin
-      - POSTGRES_PASSWORD=secret
-      - POSTGRES_DB=ai_assistant_db
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - "15432:5432"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50' # 最多使用 50% 的 CPU 核心
+          memory: 512M # 最多使用 512MB 記憶體
+        reservations:
+          cpus: '0.25'
+          memory: 256M
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d ai_assistant_db"]
@@ -118,7 +126,7 @@ services:
     ports:
       - "5000:5000"
     environment:
-      - DATABASE_URL=postgresql://admin:secret@postgres:5432/ai_assistant_db
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - REDIS_URL=redis://redis:6379
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
     depends_on:
@@ -164,6 +172,12 @@ services:
       - "8001:8000" # Expose on 8001 to avoid conflict if run locally
     depends_on:
       - milvus
+    deploy:
+      resources:
+        limits:
+          memory: 4G # 根據模型大小設定記憶體上限
+        reservations:
+          memory: 2G # 為其保留至少 2G 記憶體
     restart: on-failure
 
   stt-service:
