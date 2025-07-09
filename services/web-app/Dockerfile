@@ -1,23 +1,20 @@
-# services/web-app/Dockerfile
-# 這是一個佔位用的 Dockerfile，請根據實際的應用程式需求進行修改。
-# 例如：安裝 Python 依賴、複製程式碼、設定啟動命令等。
+# Use an official Python runtime as a parent image
+FROM python:3.9-slim
 
-FROM python:3.10-slim
+# Set the working directory in the container
+WORKDIR /usr/src/app
 
-# 1. 設定工作目錄
-WORKDIR /app
-
-# 2. 複製依賴需求檔案
+# Copy the dependencies file to the working directory
 COPY requirements.txt .
 
-# 3. 安裝依賴 (此處註解，因 requirements.txt 為空)
-# RUN pip install --no-cache-dir -r requirements.txt
+# Install any needed packages specified in requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-# 4. 複製應用程式原始碼
-# COPY . .
+# Copy the rest of the application code to the working directory
+COPY . .
 
-# 5. 設定啟動命令 (範例)
-# CMD ["flask", "run", "--host=0.0.0.0"]
+# Expose the port the app runs on
+EXPOSE 5000
 
-# 暫時的啟動命令，讓容器保持運行以供開發
-CMD ["tail", "-f", "/dev/null"]
+# Define the command to run the application
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "wsgi:app"]
