@@ -220,3 +220,15 @@ docker system prune -a # 清理所有停止的容器、未使用的網路、懸�
 5.  建立 Pull Request。
 
 在提交 Pull Request 之前，請確保您的程式碼符合專案的風格指南，並且所有測試都已通過。
+
+
+```sh
+# 開發模式的 flask 測試
+docker-compose -f docker-compose.dev.yml up -d --build web-app
+
+# 生產模式的 flask 測試
+docker-compose -f docker-compose.prod.yml up -d --build nginx
+
+# 生產模式正常啟動
+docker-compose -f docker-compose.prod.yml up -d
+```
