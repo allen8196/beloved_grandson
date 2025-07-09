@@ -254,3 +254,106 @@
   ]
 }
 ```
+
+## 5. Swagger / OpenAPI 支援
+
+為了提升 API 的可用性、可測試性與文件品質，本專案已整合 `flasgger`，提供完整的 Swagger UI 支援。開發人員與前端團隊可透過互動式介面探索、測試所有 API 端點。
+
+- **Swagger UI 存取路徑**: `http://<your-server-address>/apidocs/`
+- **OpenAPI 規格檔**: `http://<your-server-address>/apispec_1.json`
+
+### 整合步驟
+
+1.  **安裝依賴**:
+    在 `services/web-app/requirements.txt` 中新增 `flasgger`。
+
+    ```
+    pip install flasgger
+    ```
+
+2.  **初始化 Flasgger**:
+    在 `services/web-app/app/__init__.py` 或 `app.py` 中初始化 Flasgger 擴充。
+
+    ```python
+    from flask import Flask
+    from flasgger import Swagger
+
+    def create_app():
+        app = Flask(__name__)
+        # ... 其他設定 ...
+
+        # 初始化 Swagger
+        Swagger(app)
+
+        # ... 註冊藍圖 ...
+        return app
+    ```
+
+### 對 API 設計的影響
+
+- **文件即程式碼 (Documentation as Code)**: API 文件（OpenAPI 規格）直接寫在對應端點的 Python docstring 中。這確保了文件與實作永遠同步。
+- **契約驅動開發 (Contract-Driven Development)**: 開發者在實作功能前，需先思考並定義 API 的契約（路徑、參數、請求/回應格式、狀態碼）。這有助於前後端並行開發。
+- **模型標準化**: 透過 OpenAPI 的 `definitions` (或 `components/schemas`)，我們可以定義標準化的資料模型（DTOs），並在多個端點中重複使用，確保 API 回應的一致性。
+
+### 實用範例
+
+以下範例展示如何在 `users.py` 中為 `GET /api/users/me` 端點撰寫 Swagger 文件。
+
+```python
+# services/web-app/app/api/users.py
+
+from flask import Blueprint, jsonify
+from flasgger import swag_from
+
+users_bp = Blueprint('users', __name__)
+
+@users_bp.route('/me', methods=['GET'])
+def get_current_user():
+    """
+    獲取目前使用者資料
+    這是一個示範端點，用於檢索已驗證使用者的個人資料。
+    ---
+    tags:
+      - User Management
+    security:
+      - BearerAuth: []
+    responses:
+      200:
+        description: 成功獲取使用者資料。
+        schema:
+          $ref: '#/definitions/User'
+      401:
+        description: 未經授權或 Token 無效。
+    definitions:
+      User:
+        type: object
+        properties:
+          id:
+            type: string
+            format: uuid
+            description: 使用者的唯一識別碼。
+            example: "a1b2c3d4-e5f6-7890-1234-567890abcdef"
+          email:
+            type: string
+            format: email
+            description: 使用者的電子郵件地址。
+            example: "user@example.com"
+          full_name:
+            type: string
+            description: 使用者的全名。
+            example: "Alex Doe"
+          created_at:
+            type: string
+            format: date-time
+            description: 帳號建立時間。
+    """
+    # 這裡應有實際的邏輯來獲取使用者
+    user_data = {
+        "id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+        "email": "user@example.com",
+        "full_name": "Alex Doe",
+        "created_at": "2023-10-27T10:00:00Z"
+    }
+    return jsonify(user_data)
+
+```
