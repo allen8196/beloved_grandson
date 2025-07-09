@@ -18,7 +18,7 @@ def create_app(config_class=Config):
             "description": "API for the Beloved Grandson application, handling user, conversation, and task management.",
             "version": "1.0.0"
         },
-        "host": "localhost:5001",  # Adjust according to your Nginx setup
+        "host": "localhost:5000",  # Adjust according to your Nginx setup
         "basePath": "/",  # The base path for all API endpoints
         "schemes": [
             "http",
