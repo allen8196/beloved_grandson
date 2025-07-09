@@ -87,7 +87,7 @@ CONVERSATION_DEFINITIONS = {
     }
 })
 def submit_conversation_task():
-    """Accepts an audio file to start or continue a conversation."""
+    """接受音訊檔案以開始或繼續對話。"""
     # conv_service = container.resolve(ConversationService)
     # task_id = conv_service.submit_task(request.files['audio_file'], request.form.get('conversation_id'))
     # Mock response:
@@ -111,7 +111,7 @@ def submit_conversation_task():
     }
 })
 def list_conversations():
-    """Retrieves a list of all conversations for the authenticated user."""
+    """擷取已驗證使用者所有對話的列表。"""
     # Mock response:
     conversations = [
         {
@@ -148,7 +148,7 @@ def list_conversations():
     }
 })
 def get_conversation_detail(conversation_id):
-    """Retrieves a single conversation and all its messages."""
+    """擷取單一對話及其所有訊息。"""
     # Mock response:
     conversation_detail = {
         "id": str(conversation_id),

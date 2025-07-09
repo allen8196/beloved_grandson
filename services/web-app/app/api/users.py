@@ -78,7 +78,7 @@ USER_DEFINITIONS = {
     }
 })
 def register():
-    """Handles new user registration."""
+    """處理新使用者註冊。"""
     data = request.get_json()
     # user_service = container.resolve(UserService)
     # new_user = user_service.create_user(email=data['email'], password=data['password'], full_name=data['full_name'])
@@ -116,7 +116,7 @@ def register():
     }
 })
 def login():
-    """Handles user login and token generation."""
+    """處理使用者登入及權杖生成。"""
     # ... Add actual login logic here ...
     return jsonify({"access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}), 200
 
@@ -137,7 +137,7 @@ def login():
     }
 })
 def get_me():
-    """Retrieves the profile of the currently authenticated user."""
+    """擷取目前已驗證使用者的個人資料。"""
     # ... Add actual logic to get user from JWT here ...
     user_data = {
         "id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
