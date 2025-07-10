@@ -127,33 +127,27 @@ docker-compose -f docker-compose.dev.yml exec <service_name> bash
 
 *   **啟動所有服務**：
 
-    ```bash
-docker-compose -f docker-compose.prod.yml up --build -d
-    ```
-    *   **重要**：首次部署或更新程式碼後，務必執行 `--build` 以確保使用最新的映像檔。
+```sh
+# 開發模式的 flask 測試
+docker-compose -f docker-compose.dev.yml up -d --build web-app
 
-*   **常用指令**：
-    *   **查看服務狀態**：
-        ```bash
-docker-compose -f docker-compose.prod.yml ps
-        ```
-    *   **查看服務日誌**：
-        ```bash
-docker-compose -f docker-compose.prod.yml logs -f <service_name>
-        # 範例：docker-compose -f docker-compose.prod.yml logs -f web-app
-        ```
-    *   **停止所有服務**：
-        ```bash
-docker-compose -f docker-compose.prod.yml down
-        ```
-    *   **停止並移除所有容器、網路 (不會清除資料 Volume)**：
-        ```bash
-docker-compose -f docker-compose.prod.yml down
-        ```
-    *   **停止並移除所有容器、網路和 Volume (會清除所有資料，請謹慎使用！)**：
-        ```bash
+# 生產模式的 flask 測試
+docker-compose -f docker-compose.prod.yml up -d --build nginx
+
+# 生產模式正常啟動
+docker-compose -f docker-compose.prod.yml up -d
+
+
+
+# 停止並移除所有容器、網路和 Volume (會清除所有資料，請謹慎使用！)
 docker-compose -f docker-compose.prod.yml down -v
-        ```
+
+# 查看服務日誌
+docker-compose -f docker-compose.prod.yml logs -f <service_name>
+# 範例：
+docker-compose -f docker-compose.prod.yml logs -f web-app
+```
+
 
 *   **存取服務**：
     *   **Web App (透過 Nginx)**: `http://localhost` (或您的伺服器 IP/域名)
@@ -220,15 +214,3 @@ docker system prune -a # 清理所有停止的容器、未使用的網路、懸�
 5.  建立 Pull Request。
 
 在提交 Pull Request 之前，請確保您的程式碼符合專案的風格指南，並且所有測試都已通過。
-
-
-```sh
-# 開發模式的 flask 測試
-docker-compose -f docker-compose.dev.yml up -d --build web-app
-
-# 生產模式的 flask 測試
-docker-compose -f docker-compose.prod.yml up -d --build nginx
-
-# 生產模式正常啟動
-docker-compose -f docker-compose.prod.yml up -d
-```
