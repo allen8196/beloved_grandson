@@ -12,7 +12,7 @@ def create_app(config_name='default'):
     應用程式工廠函數。
     """
     app = Flask(__name__)
-    
+
     # 1. 載入設定
     app.config.from_object(config[config_name])
 

@@ -73,7 +73,7 @@ def create_user_endpoint():
 @users_bp.route('/<int:user_id>', methods=['GET'])
 @swag_from({
     'summary': '獲取使用者資訊',
-    'description': '根據使用者 ID 獲取單一使���者的詳細資訊。',
+    'description': '根據使用者 ID 獲取單一使用者的詳細資訊。',
     'tags': ['Users'],
     'parameters': [
         {

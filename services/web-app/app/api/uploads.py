@@ -21,7 +21,7 @@ uploads_bp = Blueprint('uploads', __name__)
                 'properties': {
                     'filename': {
                         'type': 'string',
-                        'description': '可選的檔案名稱。如果未提供，伺服器��生成一個唯一的名稱。',
+                        'description': '可選的檔案名稱。如果未提供，伺服器將生成一個唯一的名稱。',
                         'example': 'my-awesome-speech.wav'
                     }
                 }
@@ -55,7 +55,7 @@ def request_audio_upload_url():
     """請求音檔上傳 URL"""
     data = request.get_json()
     filename = data.get('filename') if data else None
-    
+
     bucket_name = 'audio-uploads'
     result = minio_service.generate_presigned_upload_url(
         bucket_name=bucket_name,
@@ -64,5 +64,5 @@ def request_audio_upload_url():
 
     if not result:
         return jsonify({"error": "Could not generate presigned URL"}), 500
-    
+
     return jsonify(result), 200

@@ -4,7 +4,7 @@
 FROM python:3.13
 
 # 2. 設定工作目錄
-WORKDIR /app
+WORKDIR /usr/src/app
 
 # 3. 安裝系統依賴 (如果需要編譯某些 Python 套件)
 # RUN apt-get update && apt-get install -y ...
