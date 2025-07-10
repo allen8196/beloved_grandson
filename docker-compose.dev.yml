@@ -11,8 +11,8 @@ services:
     image: postgres:15-alpine
     container_name: dev_postgres_db
     environment:
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_USER=${POSTGRES_ADMIN_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_ADMIN_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
     volumes:
       - dev_pgdata:/var/lib/postgresql/data
@@ -21,7 +21,7 @@ services:
       - "15432:5432"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_ADMIN_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -112,7 +112,7 @@ services:
       - ./services/web-app/app:/usr/src/app
     environment:
       - FLASK_ENV=development # 啟用 Flask 開發模式
-      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - DATABASE_URL=postgresql://${POSTGRES_ADMIN_USER}:${POSTGRES_ADMIN_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - REDIS_URL=redis://redis:6379
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
     depends_on:
@@ -131,7 +131,7 @@ services:
       # 掛載本地程式碼，若有修改可重啟容器生效
       - ./services/ai-worker/worker:/app/worker
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - DATABASE_URL=postgresql://${POSTGRES_ADMIN_USER}:${POSTGRES_ADMIN_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - REDIS_URL=redis://redis:6379
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
       - LLM_SERVICE_URL=http://llm-service:8000
