@@ -109,7 +109,7 @@ services:
       - "5000:5000"
     volumes:
       # 掛載本地程式碼到容器中，實現熱重載
-      - ./services/web-app/app:/usr/src/app
+      - ./services/web-app:/usr/src/app
     environment:
       - FLASK_ENV=development # 啟用 Flask 開發模式
       - DATABASE_URL=postgresql://${POSTGRES_ADMIN_USER}:${POSTGRES_ADMIN_PASSWORD}@postgres:5432/${POSTGRES_DB}
