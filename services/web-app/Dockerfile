@@ -19,5 +19,7 @@ COPY . .
 # 6. 設定環境變數
 EXPOSE 5000
 
+ENTRYPOINT ["/usr/src/app/entrypoint.sh"]
+
 # CMD 會在容器啟動時執行
 CMD ["sh", "-c", "if [ \"$FLASK_ENV\" = \"development\" ]; then flask run --host=0.0.0.0 --port=5000 --debug; else gunicorn --bind 0.0.0.0:5000 wsgi:app; fi"]

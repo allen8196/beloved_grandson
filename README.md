@@ -215,9 +215,12 @@ docker system prune -a # 清理所有停止的容器、未使用的網路、懸�
 
 在提交 Pull Request 之前，請確保您的程式碼符合專案的風格指南，並且所有測試都已通過。
 
-```sh
-# 初次啟動要進flask輸入以下指令建立資料庫
-flask db init
-flask db migrate -m "Initial migration with user table"
-flask db upgrade
-```
+## flask db 常用指令
+  * `flask db init` : **初始化遷移環境** (整個專案只需做一次)
+  * `flask db migrate -m "Add email column to user table"` : 產生一個新的 .py 腳本
+  * `flask db upgrade`: 遷移腳本實際應用到資料庫上
+  * `flask db downgrade`: 還原上一次的 `upgrade`。
+  * `flask db history`: 查看所有遷移腳本的歷史紀錄。
+  * `flask db current`: 查看目前資料庫 schema 對應到哪個遷移版本。
+
+  > 基本流程： init > migrate > upgrade > migrate > upgrade
