@@ -1,148 +1,109 @@
 # services/web-app/app/api/users.py
 
 from flask import Blueprint, request, jsonify
+from app.core import user_service
 from flasgger import swag_from
-# from app.utils.dependencies import container
-# from app.core.user_service import UserService
 
-# Using the original blueprint name and prefix for consistency
-users_bp = Blueprint('users_bp', __name__, url_prefix='/api/users')
+users_bp = Blueprint('users', __name__)
 
-# --- Swagger Definitions ---
-USER_DEFINITIONS = {
-    "definitions": {
-        "User": {
-            "type": "object",
-            "properties": {
-                "id": {"type": "string", "format": "uuid", "description": "User's unique ID."},
-                "full_name": {"type": "string", "description": "User's full name."},
-                "email": {"type": "string", "format": "email", "description": "User's email address."},
-                "created_at": {"type": "string", "format": "date-time", "description": "Timestamp of user creation."}
-            }
-        },
-        "UserInput": {
-            "type": "object",
-            "required": ["email", "password", "full_name"],
-            "properties": {
-                "full_name": {"type": "string", "example": "John Doe"},
-                "email": {"type": "string", "format": "email", "example": "john.doe@example.com"},
-                "password": {"type": "string", "format": "password", "example": "a_strong_password"}
-            }
-        },
-        "LoginCredentials": {
-            "type": "object",
-            "required": ["email", "password"],
-            "properties": {
-                "email": {"type": "string", "format": "email"},
-                "password": {"type": "string", "format": "password"}
-            }
-        },
-        "TokenResponse": {
-            "type": "object",
-            "properties": {
-                "access_token": {"type": "string", "description": "JWT access token."}
-            }
-        },
-        "ErrorResponse": {
-            "type": "object",
-            "properties": {
-                "error": {"type": "string", "description": "A description of the error."}
-            }
-        }
-    }
-}
-
-@users_bp.route('/register', methods=['POST'])
+@users_bp.route('/', methods=['POST'])
 @swag_from({
-    **USER_DEFINITIONS,
-    'tags': ['User Management'],
-    'summary': 'Register a new user',
+    'summary': '建立新使用者',
+    'description': '註冊一個新的使用者帳號。',
+    'tags': ['Users'],
     'parameters': [
         {
-            'in': 'body',
             'name': 'body',
-            'schema': {'$ref': '#/definitions/UserInput'},
+            'in': 'body',
             'required': True,
-            'description': 'User registration details.'
+            'schema': {
+                'id': 'NewUser',
+                'required': ['username', 'email', 'password'],
+                'properties': {
+                    'username': {
+                        'type': 'string',
+                        'description': '使用者名稱',
+                        'example': 'john_doe'
+                    },
+                    'email': {
+                        'type': 'string',
+                        'description': '電子郵件地址',
+                        'example': 'john.doe@example.com'
+                    },
+                    'password': {
+                        'type': 'string',
+                        'description': '使用者密碼',
+                        'format': 'password',
+                        'example': 'strong_password_123'
+                    }
+                }
+            }
         }
     ],
     'responses': {
         '201': {
-            'description': 'User created successfully.',
-            'schema': {'$ref': '#/definitions/User'}
+            'description': '使用者建立成功',
+            'schema': {
+                'properties': {
+                    'message': {'type': 'string'},
+                    'user': {
+                        'properties': {
+                            'id': {'type': 'integer'},
+                            'username': {'type': 'string'},
+                            'email': {'type': 'string'},
+                            'created_at': {'type': 'string', 'format': 'date-time'}
+                        }
+                    }
+                }
+            }
         },
         '400': {
-            'description': 'Invalid input or user already exists.',
-            'schema': {'$ref': '#/definitions/ErrorResponse'}
+            'description': '請求無效或使用者已存在'
         }
     }
 })
-def register():
-    """處理新使用者註冊。"""
+def create_user_endpoint():
+    """建立新使用者"""
     data = request.get_json()
-    # user_service = container.resolve(UserService)
-    # new_user = user_service.create_user(email=data['email'], password=data['password'], full_name=data['full_name'])
-    # This is a mock response for demonstration
-    new_user = {
-        "id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
-        "email": data['email'],
-        "full_name": data['full_name'],
-        "created_at": "2023-10-27T10:00:00Z"
-    }
-    return jsonify(new_user), 201
+    user, message = user_service.create_user(data)
+    if not user:
+        return jsonify({"error": message}), 400
+    return jsonify({"message": message, "user": user.to_dict()}), 201
 
-@users_bp.route('/login', methods=['POST'])
+@users_bp.route('/<int:user_id>', methods=['GET'])
 @swag_from({
-    'tags': ['User Management'],
-    'summary': 'Log in a user',
+    'summary': '獲取使用者資訊',
+    'description': '根據使用者 ID 獲取單一使���者的詳細資訊。',
+    'tags': ['Users'],
     'parameters': [
         {
-            'in': 'body',
-            'name': 'body',
-            'schema': {'$ref': '#/definitions/LoginCredentials'},
+            'name': 'user_id',
+            'in': 'path',
+            'type': 'integer',
             'required': True,
-            'description': 'User login credentials.'
+            'description': '要查詢的使用者 ID'
         }
     ],
     'responses': {
         '200': {
-            'description': 'Login successful, returns access token.',
-            'schema': {'$ref': '#/definitions/TokenResponse'}
+            'description': '成功獲取使用者資訊',
+            'schema': {
+                'properties': {
+                    'id': {'type': 'integer'},
+                    'username': {'type': 'string'},
+                    'email': {'type': 'string'},
+                    'created_at': {'type': 'string', 'format': 'date-time'}
+                }
+            }
         },
-        '401': {
-            'description': 'Invalid credentials.',
-            'schema': {'$ref': '#/definitions/ErrorResponse'}
+        '404': {
+            'description': '找不到指定的使用者'
         }
     }
 })
-def login():
-    """處理使用者登入及權杖生成。"""
-    # ... Add actual login logic here ...
-    return jsonify({"access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}), 200
-
-@users_bp.route('/me', methods=['GET'])
-@swag_from({
-    'tags': ['User Management'],
-    'summary': 'Get current user profile',
-    'security': [{'BearerAuth': []}],
-    'responses': {
-        '200': {
-            'description': 'Successfully retrieved user profile.',
-            'schema': {'$ref': '#/definitions/User'}
-        },
-        '401': {
-            'description': 'Unauthorized or invalid token.',
-            'schema': {'$ref': '#/definitions/ErrorResponse'}
-        }
-    }
-})
-def get_me():
-    """擷取目前已驗證使用者的個人資料。"""
-    # ... Add actual logic to get user from JWT here ...
-    user_data = {
-        "id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
-        "email": "user@example.com",
-        "full_name": "Current User",
-        "created_at": "2023-10-27T10:00:00Z"
-    }
-    return jsonify(user_data), 200
+def get_user_endpoint(user_id):
+    """獲取使用者資訊"""
+    user = user_service.get_user_by_id(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    return jsonify(user.to_dict()), 200

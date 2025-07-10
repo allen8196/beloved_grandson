@@ -1,6 +1,20 @@
-from app import create_app
+# services/web-app/wsgi.py
 
-app = create_app()
+import os
+from dotenv import load_dotenv
 
-if __name__ == "__main__":
+# 在應用程式啟動前載入 .env 檔案
+# 這確保 os.getenv() 能讀取到 .flaskenv 或 .env 中的變數
+dotenv_path = os.path.join(os.path.dirname(__file__), '.flaskenv')
+if os.path.exists(dotenv_path):
+    load_dotenv(dotenv_path)
+
+from app.app import create_app
+
+# 建立 Flask app instance
+# 使用環境變數 FLASK_CONFIG 來決定要載入的設定，預設為 'development'
+config_name = os.getenv('FLASK_CONFIG', 'development')
+app = create_app(config_name)
+
+if __name__ == '__main__':
     app.run()

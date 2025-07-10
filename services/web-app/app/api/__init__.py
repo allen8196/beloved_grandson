@@ -1,11 +1,3 @@
-from flask import Blueprint
+# services/web-app/app/api/__init__.py
 
-from .users import users_bp
-from .conversations import conversations_bp
-# from .messages import messages_bp # This blueprint is deprecated as per the new architecture
-
-api_bp = Blueprint('api', __name__)
-
-api_bp.register_blueprint(users_bp)
-api_bp.register_blueprint(conversations_bp)
-# api_bp.register_blueprint(messages_bp)
+# 這個檔案讓 'api' 資料夾成為一個 Python 套件
