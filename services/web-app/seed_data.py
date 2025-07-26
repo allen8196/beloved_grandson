@@ -16,7 +16,7 @@ DATA_MONTHS = 12 # 生成過去幾個月的資料
 
 # --- 初始化 ---
 fake = Faker('zh_TW')
-app = create_app()
+app, socketio = create_app()
 
 # --- 輔助函式 ---
 def get_mmrc_answer(score):
@@ -48,7 +48,7 @@ def create_admin_and_therapists(num_therapists):
     """建立管理員和治療師"""
     print(f"建立 1 位管理員及 {num_therapists} 位治療師...")
     users_to_create = []
-    
+
     # 1. 建立管理員
     admin_user = User(
         account='admin',
@@ -75,7 +75,7 @@ def create_admin_and_therapists(num_therapists):
         therapist.set_password('password')
         therapist.staff_details = StaffDetail(title='呼吸治療師')
         users_to_create.append(therapist)
-        
+
     db.session.bulk_save_objects(users_to_create)
     db.session.commit()
     return User.query.filter_by(is_staff=True, is_admin=False).all()
@@ -97,7 +97,7 @@ def create_patients(num_patients, therapists):
             phone=fake.phone_number()
         )
         patient.set_password('password')
-        
+
         assigned_therapist = random.choice(therapists)
         patient.health_profile = HealthProfile(
             height_cm=random.randint(150, 190),
@@ -106,7 +106,7 @@ def create_patients(num_patients, therapists):
             staff_id=assigned_therapist.id
         )
         patients_to_create.append(patient)
-        
+
     db.session.add_all(patients_to_create)
     db.session.commit()
     return User.query.filter_by(is_staff=False, is_admin=False).all()
@@ -114,7 +114,7 @@ def create_patients(num_patients, therapists):
 def generate_historical_data(patients, months):
     """為病患生成過去數個月的健康日誌和問卷"""
     print(f"為 {len(patients)} 位病患生成過去 {months} 個月的歷史資料...")
-    
+
     today = date.today()
     metrics_to_create = []
     cat_records_to_create = []
@@ -143,7 +143,7 @@ def generate_historical_data(patients, months):
             while month <= 0:
                 month += 12
                 year -= 1
-            
+
             record_date = date(year, month, random.randint(1, 28))
 
             # CAT
