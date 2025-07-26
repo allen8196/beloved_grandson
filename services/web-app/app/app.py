@@ -2,10 +2,13 @@
 
 from flask import Flask, jsonify
 from .config import config
-from .utils.extensions import db, migrate, swagger
-from .api.users import users_bp
+from .utils.extensions import db, migrate, swagger, jwt, socketio
+from .api.auth import auth_bp
+from .api.patients import patients_bp
+from .api.questionnaires import questionnaires_bp
 from .api.uploads import uploads_bp
-from .api.conversations import conversations_bp
+from .api.users import users_bp
+from .api.daily_metrics import daily_metrics_bp
 
 def create_app(config_name='default'):
     """
@@ -20,11 +23,25 @@ def create_app(config_name='default'):
     db.init_app(app)
     migrate.init_app(app, db)
     swagger.init_app(app)
+    jwt.init_app(app)
+    socketio.init_app(app, async_mode='gevent', cors_allowed_origins="*")
 
-    # 3. 註冊 Blueprints
-    app.register_blueprint(users_bp, url_prefix='/api/users')
-    app.register_blueprint(uploads_bp, url_prefix='/api/uploads')
-    app.register_blueprint(conversations_bp, url_prefix='/api/conversations')
+    # Register Blueprints
+    from .api.users import users_bp
+    from .api.auth import auth_bp
+    from .api.patients import patients_bp
+    from .api.questionnaires import questionnaires_bp
+    from .api.daily_metrics import daily_metrics_bp
+    from .api.uploads import uploads_bp
+    from .api.chat import bp as chat_bp # Explicitly import and alias the blueprint
+
+    app.register_blueprint(users_bp)
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(patients_bp)
+    app.register_blueprint(questionnaires_bp)
+    app.register_blueprint(daily_metrics_bp)
+    app.register_blueprint(uploads_bp)
+    app.register_blueprint(chat_bp) # Register the aliased blueprint
 
     # 4. 註冊全域錯誤處理器
     @app.errorhandler(404)
@@ -41,4 +58,13 @@ def create_app(config_name='default'):
     def index():
         return "Web App is running!"
 
-    return app
+    # WebSocket 事件處理
+    @socketio.on('connect')
+    def handle_connect():
+        print('Client connected')
+
+    @socketio.on('disconnect')
+    def handle_disconnect():
+        print('Client disconnected')
+
+    return app, socketio

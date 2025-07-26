@@ -1,30 +1,48 @@
 # services/web-app/app/core/user_service.py
-
-from app.utils.extensions import db
-from app.models.user import User
-# 在實際應用中，這裡會加入密碼雜湊的邏輯
-from werkzeug.security import generate_password_hash, check_password_hash
+from ..models import User, StaffDetail
+from .user_repository import UserRepository
 
 def create_user(data):
-    """建立新使用者"""
-    username = data.get('username')
-    email = data.get('email')
+    """建立新使用者 (管理員專用)"""
+    repo = UserRepository()
+    
+    account = data.get('account')
     password = data.get('password')
+    is_staff = data.get('is_staff', False)
+    is_admin = data.get('is_admin', False)
+    email = data.get('email')
 
-    if not username or not email or not password:
-        return None, "缺少必要欄位 (username, email, password)"
+    if not account or not password:
+        return None, "Account and password are required."
 
-    if User.query.filter_by(username=username).first() or User.query.filter_by(email=email).first():
-        return None, "使用者名稱或電子郵件已存在"
+    if repo.find_by_account(account):
+        return None, f"User with account '{account}' already exists."
 
-    password_hash = generate_password_hash(password) # 實際應儲存雜湊後的密碼
-    new_user = User(username=username, email=email, password_hash=password_hash)
+    if email and repo.find_by_email(email):
+        return None, f"User with email '{email}' already exists."
 
-    db.session.add(new_user)
-    db.session.commit()
+    new_user = User(
+        account=account,
+        is_staff=is_staff,
+        is_admin=is_admin,
+        first_name=data.get('first_name'),
+        last_name=data.get('last_name'),
+        email=email
+    )
+    new_user.set_password(password)
 
-    return new_user, "使用者建立成功"
+    # 如果是員工，則建立職稱詳情
+    if is_staff and 'title' in data:
+        staff_detail = StaffDetail(
+            user=new_user,
+            title=data.get('title')
+        )
+
+    repo.add(new_user)
+    repo.commit()
+
+    return new_user, None
 
 def get_user_by_id(user_id):
-    """透過 ID 尋找使用者"""
-    return User.query.get(user_id)
+    repo = UserRepository()
+    return repo.find_by_id(user_id)

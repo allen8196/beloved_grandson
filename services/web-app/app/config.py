@@ -4,6 +4,7 @@ import os
 class Config:
     """基礎設定"""
     SECRET_KEY = os.getenv('SECRET_KEY', 'a_very_secret_key')
+    JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'a_super_secret_jwt_key')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # Flasgger (Swagger) 設定
@@ -19,6 +20,14 @@ class Config:
         },
         'license': {
             'name': 'MIT',
+        },
+        'securityDefinitions': {
+            'bearerAuth': {
+                'type': 'apiKey',
+                'name': 'Authorization',
+                'in': 'header',
+                'description': 'JWT Authorization header using the Bearer scheme. Example: "Authorization: Bearer {token}"'
+            }
         },
         "specs_route": "/apidocs/"
     }

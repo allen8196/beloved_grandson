@@ -47,7 +47,7 @@ services:
       - RABBITMQ_DEFAULT_USER=guest
       - RABBITMQ_DEFAULT_PASS=guest
     ports:
-      - "5672:5672"
+      - "15673:5672" # 將主機埠改為 15673，避開 Windows 預留區
       - "15672:15672"
     restart: unless-stopped
 
@@ -115,12 +115,15 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_ADMIN_USER}:${POSTGRES_ADMIN_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - REDIS_URL=redis://redis:6379
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - RABBITMQ_NOTIFICATION_QUEUE=notifications_queue
+      - RABBITMQ_QUEUE=task_queue
+      - PYTHONUNBUFFERED=1
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    restart: on-failure
+    command: python wsgi.py
 
   ai-worker:
     build:
@@ -129,7 +132,7 @@ services:
     container_name: dev_ai_worker_service
     volumes:
       # 掛載本地程式碼，若有修改可重啟容器生效
-      - ./services/ai-worker/worker:/app/worker
+      - ./services/ai-worker:/app
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_ADMIN_USER}:${POSTGRES_ADMIN_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - REDIS_URL=redis://redis:6379
@@ -137,6 +140,13 @@ services:
       - LLM_SERVICE_URL=http://llm-service:8000
       - STT_SERVICE_URL=http://stt-service:8000
       - TTS_SERVICE_URL=http://tts-service:8000
+      - MINIO_ENDPOINT_URL=http://minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_QUEUE=task_queue
+      - RABBITMQ_NOTIFICATION_QUEUE=notifications_queue
+      - PYTHONUNBUFFERED=1
     depends_on:
       - rabbitmq
       - postgres
@@ -144,7 +154,6 @@ services:
       - llm-service
       - stt-service
       - tts-service
-    restart: on-failure
 
   # -------------------------------------------------
   #  3. AI 微服務層 (開發模式)
@@ -154,6 +163,14 @@ services:
       context: ./services/llm-service
       dockerfile: Dockerfile
     container_name: dev_llm_service
+    volumes:
+      # 掛載本地程式碼，方便開發與測試
+      - ./services/llm-service:/app
+    command: |
+      sh -c "
+        pip install --no-cache-dir -r requirements.txt &&
+        PYTHONPATH=/app uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      "
     environment:
       - MILVUS_HOST=milvus
       - MILVUS_PORT=19530
@@ -161,13 +178,16 @@ services:
       - "8001:8000"
     depends_on:
       - milvus
-    restart: on-failure
 
   stt-service:
     build:
       context: ./services/stt-service
       dockerfile: Dockerfile
     container_name: dev_stt_service
+    volumes:
+      - ./services/stt-service:/app
+    command: >
+      sh -c "pip install --no-cache-dir -r requirements.txt && PYTHONPATH=/app uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     ports:
       - "8002:8000"
     restart: on-failure
@@ -177,6 +197,10 @@ services:
       context: ./services/tts-service
       dockerfile: Dockerfile
     container_name: dev_tts_service
+    volumes:
+      - ./services/tts-service:/app
+    command: >
+      sh -c "pip install --no-cache-dir -r requirements.txt && PYTHONPATH=/app uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     ports:
       - "8003:8000"
     restart: on-failure

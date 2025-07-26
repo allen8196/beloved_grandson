@@ -1,226 +1,195 @@
-# Beloved Grandson 專案
+# 健康陪跑台語語音機器人 (Beloved Grandson)
 
-## 專案概述
+## 1. 專案概述
 
-「Beloved Grandson」是一個基於 Docker Compose 部署的微服務 AI 對話應用。它整合了語音轉文字 (STT)、大型語言模型 (LLM，支援 TAIDE 與 RAG)、文字轉語音 (TTS) 等核心 AI 功能，並透過訊息佇列實現服務間的解耦與非同步處理。本專案旨在提供一個高效、可擴展且易於維護的 AI 應用開發與部署框架。
+本專案是一個基於 Docker Compose 部署的微服務 AI 對話應用，旨在為慢性病患者提供一個台語語音互動的健康管理夥伴。系統整合了語音轉文字 (STT)、大型語言模型 (LLM) 及文字轉語音 (TTS) 等核心 AI 功能，並透過非同步任務佇列實現服務間的高效協作。
 
-### 核心架構組件
+### 核心功能
+*   **使用者管理**: 包含治療師、管理員與病患三種角色。
+*   **病患儀表板**: 供治療師追蹤管理所有病患的健康狀況。
+*   **健康數據追蹤**: 病患可每日記錄喝水、用藥、運動、抽菸等數據。
+*   **臨床問卷**: 實現標準化的 CAT 與 MMRC 問卷，供病患每月填寫。
+*   **AI 語音對話**: (開發中) 病患可透過台語語音與 AI 進行互動。
 
-*   **前端/API Gateway**: `web-app` (Flask)，處理使用者請求、狀態協調、WebSocket 通訊。
-*   **非同步任務處理**: `ai-worker`，消費來自 RabbitMQ 的任務，調度 AI 服務。
-*   **AI 核心服務**: `stt-service` (語音轉文字)、`llm-service` (核心語言模型，整合 TAIDE 與 RAG)、`tts-service` (文字轉語音)。
-*   **資料庫**: PostgreSQL (主要資料)、Redis (快取/任務結果)、Milvus (向量資料庫)、MinIO (物件儲存)。
-*   **訊息佇列**: RabbitMQ。
-*   **反向代理**: Nginx (生產環境)。
+### 技術架構
+| 組件 | 技術/服務 | 用途 |
+| :--- | :--- | :--- |
+| **Web 應用** | Flask | API Gateway, 處理使用者請求, WebSocket 通訊 |
+| **非同步任務** | Celery / RabbitMQ | 處理耗時的 AI 任務 (STT, LLM, TTS) |
+| **資料庫** | PostgreSQL | 儲存核心業務資料 (使用者, 健康數據等) |
+| **快取** | Redis | 儲存 Session, 快取常用查詢 |
+| **物件儲存** | MinIO | 儲存使用者上傳的音檔及 AI 生成的音檔 |
+| **反向代理** | Nginx | (生產環境) 統一請求入口, 負載平衡 |
+| **容器化** | Docker / Docker Compose | 統一部署與管理所有服務 |
 
-## 環境需求
+---
 
-在開始之前，請確保您的系統已安裝以下軟體：
+## 2. 初次使用設定
 
-*   **Docker**: 版本 20.10.0 或更高。
-*   **Docker Compose**: 版本 1.29.0 或更高 (或 Docker Compose V2)。
+在開始之前，請確保您的系統已安裝 **Docker** 和 **Docker Compose**。
 
-## 安裝與設定
-
-### 1. 複製專案
+### 步驟 1: 複製專案
 
 ```bash
 git clone <您的專案 Git URL>
-cd beloved_grandson
+cd <專案目錄>
 ```
 
-### 2. 設定環境變數 (`.env` 檔案)
+### 步驟 2: 設定環境變數
 
-本專案使用 `.env` 檔案來管理敏感資訊和環境特定的配置。請根據 `.env.example` 檔案建立一個 `.env` 檔案，並填寫您的配置。
+本專案使用兩個環境變數檔案，請分別建立：
+
+**2.1. 專案根目錄 `.env`**
+
+此檔案主要供 Docker Compose 使用，用於設定資料庫、MinIO 等服務的**帳號密碼**。
 
 ```bash
 cp .env.example .env
 ```
 
-編輯 `.env` 檔案，填寫以下變數：
+**2.2. Web App 專用 `.flaskenv`**
 
-```ini
-# PostgreSQL 資料庫設定
-POSTGRES_USER=admin
-POSTGRES_PASSWORD=secret
-POSTGRES_DB=ai_assistant_db
-
-# RabbitMQ 設定 (生產環境建議修改預設值)
-RABBITMQ_DEFAULT_USER=guest
-RABBITMQ_DEFAULT_PASS=guest
-
-# MinIO 設定 (生產環境建議修改預設值)
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin
-
-# Flask 應用程式密鑰 (生產環境務必修改為強密鑰)
-SECRET_KEY=your_super_secret_key_here
-```
-
-**重要提示**：在生產環境中，請務必將 `RABBITMQ_DEFAULT_USER`、`RABBITMQ_DEFAULT_PASS`、`MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY` 和 `SECRET_KEY` 設定為複雜且安全的密碼。
-
-## 環境啟動與管理
-
-本專案提供兩種 Docker Compose 配置，分別用於**開發環境**和**生產環境**。
-
-### 1. 開發環境 (Development Environment)
-
-開發環境專為開發者設計，支援程式碼熱重載，方便快速迭代。
-
-*   **特點**：
-    *   `web-app` 和 `ai-worker` 的原始碼會掛載到容器中，修改程式碼後無需重新建置映像檔即可生效 (部分服務可能需要重啟容器)。
-    *   直接暴露 `web-app` (5000)、`llm-service` (8001)、`stt-service` (8002)、`tts-service` (8003) 的埠，方便直接測試。
-    *   資料庫和快取服務的資料會持久化到本地的 Docker Volume 中，但方便清理。
-
-*   **啟動所有服務**：
-
-    ```bash
-docker-compose -f docker-compose.dev.yml up --build -d
-    ```
-    *   `--build`: 確保在啟動前重新建置所有服務的 Docker 映像檔。
-    *   `-d`: 在背景模式下運行容器。
-
-*   **常用指令**：
-    *   **查看服務狀態**：
-        ```bash
-docker-compose -f docker-compose.dev.yml ps
-        ```
-    *   **查看服務日誌**：
-        ```bash
-docker-compose -f docker-compose.dev.yml logs -f <service_name>
-        # 範例：docker-compose -f docker-compose.dev.yml logs -f web-app
-        ```
-    *   **停止所有服務**：
-        ```bash
-docker-compose -f docker-compose.dev.yml down
-        ```
-    *   **停止並移除所有容器、網路和 Volume (會清除資料)**：
-        ```bash
-docker-compose -f docker-compose.dev.yml down -v
-        ```
-    *   **進入容器內部**：
-        ```bash
-docker-compose -f docker-compose.dev.yml exec <service_name> bash
-        # 範例：docker-compose -f docker-compose.dev.yml exec web-app bash
-        ```
-
-*   **存取服務**：
-    *   **Web App (API)**: `http://localhost:5000`
-    *   **Swagger UI**: `http://localhost:5000/apidocs/`
-    *   **PostgreSQL**: `localhost:15432` (使用者/密碼/DB 名稱請參考 `.env`)
-    *   **Redis**: `localhost:6379`
-    *   **RabbitMQ Management UI**: `http://localhost:15672` (預設使用者/密碼: guest/guest)
-    *   **MinIO Console**: `http://localhost:9001` (預設使用者/密碼: minioadmin/minioadmin)
-    *   **LLM Service**: `http://localhost:8001`
-    *   **STT Service**: `http://localhost:8002`
-    *   **TTS Service**: `http://localhost:8003`
-
-### 2. 生產環境 (Production Environment)
-
-生產環境配置旨在提供穩定、高效和安全的運行環境。
-
-*   **特點**：
-    *   所有服務的程式碼都已內建於 Docker 映像檔中，不進行原始碼掛載。
-    *   透過 Nginx 作為反向代理和負載平衡器，統一處理所有外部請求 (預設監聽 80 埠)。
-    *   資料庫和儲存服務的資料會持久化到具名的 Docker Volume 中，確保資料安全。
-    *   RabbitMQ 和 MinIO 的管理介面埠僅在內部網路可達，或透過 Nginx 代理。
-
-*   **啟動所有服務**：
-
-```sh
-# 開發模式的 flask 測試
-docker-compose -f docker-compose.dev.yml up -d --build web-app
-
-# 生產模式的 flask 測試
-docker-compose -f docker-compose.prod.yml up -d --build nginx
-
-# 生產模式正常啟動
-docker-compose -f docker-compose.prod.yml up -d
-
-
-
-# 停止並移除所有容器、網路和 Volume (會清除所有資料，請謹慎使用！)
-docker-compose -f docker-compose.prod.yml down -v
-
-# 查看服務日誌
-docker-compose -f docker-compose.prod.yml logs -f <service_name>
-# 範例：
-docker-compose -f docker-compose.prod.yml logs -f web-app
-```
-
-
-*   **存取服務**：
-    *   **Web App (透過 Nginx)**: `http://localhost` (或您的伺服器 IP/域名)
-    *   **Swagger UI**: `http://localhost/apidocs/`
-    *   **PostgreSQL**: `localhost:15432` (通常僅供內部服務或管理工具存取)
-    *   **RabbitMQ Management UI**: `http://localhost:15672` (如果您的 `docker-compose.prod.yml` 暴露了此埠)
-    *   **MinIO Console**: `http://localhost:9001` (如果您的 `docker-compose.prod.yml` 暴露了此埠)
-
-## 文件更新原則
-
-*   **架構文件 (`document/架構文件.md`)**: 任何系統架構上的重大變更 (如新增/移除服務、改變服務間通訊方式) 都應在此文件更新。
-*   **資料庫文件 (`document/資料庫.md`)**: 資料庫結構 (表、欄位、關聯) 的變更應在此文件更新。
-*   **API 文件 (`document/flask_API.md`)**: 任何 API 端點的變更 (路徑、方法、參數、回應格式) 都應在此文件更新，並確保與程式碼中的 Swagger Docstring 同步。
-*   **檔案結構 (`document/檔案結構.md`)**: 專案目錄結構的重大調整應在此文件更新。
-*   **README.md**: 部署流程、環境設定、常用指令等變更應在此文件更新。
-
-## 常見問題與故障排除
-
-### 1. 容器無法啟動或健康檢查失敗
-
-*   **檢查日誌**：使用 `docker-compose -f <env_file>.yml logs <service_name>` 查看特定服務的日誌，通常錯誤訊息會明確指出問題所在。
-*   **埠衝突**：確保主機上沒有其他程式佔用 Docker Compose 配置中暴露的埠 (例如 5000, 80, 15432 等)。
-*   **環境變數**：檢查 `.env` 檔案中的環境變數是否正確配置，特別是資料庫連線資訊。
-*   **資源不足**：如果您的機器資源 (CPU/記憶體) 較少，部分服務 (尤其是 `llm-service`) 可能會因為資源不足而啟動失敗。嘗試增加 Docker 的資源限制。
-
-### 2. `web-app` 無法連接到資料庫或 Redis
-
-*   **服務名稱**：在 Docker Compose 網路中，服務之間應使用服務名稱 (例如 `postgres`, `redis`) 進行通訊，而不是 `localhost` 或 `127.0.0.1`。
-*   **健康檢查**：確認 `postgres` 和 `redis` 服務的健康檢查狀態是否為 `healthy`。如果不是，`web-app` 可能會因為依賴服務未就緒而啟動失敗。
-
-### 3. `ai-worker` 無法連接到 AI 微服務
-
-*   **服務名稱**：確保 `ai-worker` 的環境變數中，AI 微服務的 URL 使用了正確的服務名稱 (例如 `http://llm-service:8000`)。
-*   **服務啟動**：確認所有 AI 微服務 (`llm-service`, `stt-service`, `tts-service`) 都已成功啟動並運行。
-
-### 4. `web-app` 熱重載未生效 (開發環境)
-
-*   **Volume 掛載**：確認 `docker-compose.dev.yml` 中 `web-app` 服務的 `volumes` 配置是否正確，確保本地程式碼目錄已正確掛載到容器內部。
-    ```yaml
-    volumes:
-      - ./services/web-app/app:/app/app
-    ```
-*   **FLASK_ENV**：確認 `FLASK_ENV` 環境變數是否設定為 `development`。
-
-### 5. 清理 Docker 資源
-
-如果您遇到不明問題，或需要徹底清理環境重新開始，可以使用以下命令：
+此檔案位於 `services/web-app/` 目錄下，主要供 Flask 應用程式讀取，用於設定**服務連線 URL** 和 Flask 自身的行為。
 
 ```bash
-docker-compose -f docker-compose.dev.yml down -v # 清理開發環境所有資源
-docker-compose -f docker-compose.prod.yml down -v # 清理生產環境所有資源 (謹慎！會刪除資料)
-
-docker system prune -a # 清理所有停止的容器、未使用的網路、懸掛的映像檔和建置快取 (會刪除所有 Docker 相關資料，請謹慎使用！)
+cp services/web-app/.flaskenv.example services/web-app/.flaskenv
 ```
 
-## 貢獻指南
+**重要提示**: 在本地開發環境中，您**無需修改**這兩個檔案的任何內容即可啟動。若要部署到生產環境，請務必修改 `.env` 檔案中的所有密碼，並考慮使用更安全的方式管理 `.flaskenv` 中的連線資訊。
 
-歡迎對本專案做出貢獻！請遵循以下步驟：
+### 步驟 3: 修正換行符號 (Windows 使用者)
 
-1.  Fork 本專案。
-2.  建立新的功能分支 (`git checkout -b feature/your-feature-name`)。
-3.  提交您的變更 (`git commit -am 'feat: Add new feature'`)。
-4.  推送到遠端分支 (`git push origin feature/your-feature-name`)。
-5.  建立 Pull Request。
+為避免腳本執行錯誤，請確保以下檔案的換行符號為 `LF` (可在 VS Code 右下角切換)：
+*   `.env`
+*   `entrypoint.sh`
 
-在提交 Pull Request 之前，請確保您的程式碼符合專案的風格指南，並且所有測試都已通過。
+---
 
-## flask db 常用指令
-  * `flask db init` : **初始化遷移環境** (整個專案只需做一次)
-  * `flask db migrate -m "Add email column to user table"` : 產生一個新的 .py 腳本
-  * `flask db upgrade`: 遷移腳本實際應用到資料庫上
-  * `flask db downgrade`: 還原上一次的 `upgrade`。
-  * `flask db history`: 查看所有遷移腳本的歷史紀錄。
-  * `flask db current`: 查看目前資料庫 schema 對應到哪個遷移版本。
+## 3. 開發環境工作流程
 
-  > 基本流程： init > migrate > upgrade > migrate > upgrade
+### 步驟 1: 啟動開發環境
+
+此指令會建置並啟動所有開發所需的服務。`--build` 參數會確保在您修改了 `requirements.txt` 等依賴後，容器會被重新建置。
+
+```bash
+docker-compose -f docker-compose.dev.yml up -d --build
+```
+
+### 步驟 2: 初始化與遷移資料庫
+
+如果是**第一次**啟動專案，或在**模型 (models.py) 發生變更**後，需要執行以下資料庫遷移指令：
+
+```bash
+# 進入 web-app 容器
+docker-compose -f docker-compose.dev.yml exec web-app bash
+
+# 在容器內執行遷移 (如果是第一次，請先執行 flask db init)
+flask db migrate -m "您的變更描述"
+flask db upgrade
+
+# 完成後退出容器
+exit
+```
+
+### 步驟 3: 建立測試資料集 (強烈建議)
+
+為了方便測試所有 API 功能，我們提供了一個功能強大的資料生成腳本。它會**清除所有現有資料**，並建立一個包含大量擬真數據的全新資料集。
+
+*   **執行指令**:
+    ```bash
+    docker-compose -f docker-compose.dev.yml exec web-app python seed_data.py
+    ```
+*   **生成內容**:
+    *   **1 位管理員**:
+        *   帳號: `admin`
+        *   密碼: `admin`
+    *   **5 位治療師**:
+        *   帳號: `therapist_01` ~ `therapist_05`
+        *   密碼: `password`
+    *   **50 位病患**:
+        *   帳號: `patient_001` ~ `patient_050`
+        *   密碼: `password`
+    *   **12 個月的歷史資料**:
+        *   每位病患的每日健康日誌。
+        *   每位病患的每月 CAT & MMRC 問卷。
+
+### 常用開發指令
+
+*   **查看所有服務日誌**:
+    ```bash
+    docker-compose -f docker-compose.dev.yml logs -f
+    ```
+*   **只查看特定服務日誌** (例如 `web-app`):
+    ```bash
+    docker-compose -f docker-compose.dev.yml logs -f web-app
+    ```
+*   **停止並移除所有開發容器**:
+    ```bash
+    docker-compose -f docker-compose.dev.yml down -v
+    ```
+
+---
+
+## 4. 執行測試
+
+本專案使用 `pytest` 進行單元測試與整合測試。所有測試相關的指令都應在 `web-app` 服務的容器內執行。
+
+### 步驟 1: 執行基本測試
+
+您可以使用以下指令來執行所有測試：
+
+```bash
+docker-compose -f docker-compose.dev.yml exec web-app pytest
+```
+
+若要執行特定模組的測試，可以指定檔案路徑：
+
+```bash
+docker-compose -f docker-compose.dev.yml exec web-app pytest tests/test_patients.py
+```
+
+### 步驟 2: 產生測試覆蓋率報告
+
+為了評估測試的完整性，您可以產生一份覆蓋率報告。此報告會顯示哪些程式碼行有被測試覆蓋，哪些沒有。
+
+```bash
+docker-compose -f docker-compose.dev.yml exec web-app pytest --cov=app --cov-report=term-missing
+```
+
+*   `--cov=app`: 指定要計算覆蓋率的目標目錄 (我們的 Flask 應用程式位於 `app` 目錄下)。
+*   `--cov-report=term-missing`: 在終端機中顯示報告，並特別標示出「未被覆蓋」的程式碼行號。
+
+---
+
+## 5. 生產環境部署
+
+生產環境使用 `Nginx` 作為反向代理，並以更安全、高效的方式運行。
+
+*   **啟動指令**:
+    ```bash
+    docker-compose -f docker-compose.prod.yml up -d --build
+    ```
+*   **停止指令**:
+    ```bash
+    docker-compose -f docker-compose.prod.yml down -v
+    ```
+*   **主要差異**:
+    *   所有請求都應透過 Nginx (預設 `80` 埠)。
+    *   原始碼不會掛載到容器中，每次程式碼更新都需要重新建置映像檔。
+    *   資料會儲存在具名的 Docker Volume 中，更加持久與安全。
+
+---
+
+## 6. 服務入口 (開發環境)
+
+| 服務 | 內部埠 | 外部 URL / 連線資訊 | 備註 |
+| :--- | :--- | :--- | :--- |
+| **Web App (API)** | `5000` | `http://localhost:5000` | 主要 API 服務 |
+| **Swagger UI** | `5000` | `http://localhost:5000/apidocs/` | API 文件與測試介面 |
+| **PostgreSQL** | `5432` | `localhost:15432` | DB, 帳密請見 `.env` |
+| **Redis** | `6379` | `localhost:6379` | 快取服務 |
+| **RabbitMQ UI** | `15672`| `http://localhost:15672` | 帳號/密碼: `guest`/`guest` |
+| **MinIO Console**| `9001` | `http://localhost:9001` | 帳號/密碼: `minioadmin`/`minioadmin` |
+| **LLM Service** | `8001` | `http://localhost:8001` | (若需單獨測試) |
+| **STT Service** | `8002` | `http://localhost:8002` | (若需單獨測試) |
+| **TTS Service** | `8003` | `http://localhost:8003` | (若需單獨測試) |

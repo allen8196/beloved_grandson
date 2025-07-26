@@ -1,16 +1,19 @@
 # services/web-app/app/api/users.py
-
 from flask import Blueprint, request, jsonify
-from app.core import user_service
 from flasgger import swag_from
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from ..core.user_service import create_user, get_user_by_id
+from ..models import User
 
-users_bp = Blueprint('users', __name__)
+users_bp = Blueprint('users', __name__, url_prefix='/api/v1/users')
 
 @users_bp.route('/', methods=['POST'])
+@jwt_required()
 @swag_from({
-    'summary': '建立新使用者',
-    'description': '註冊一個新的使用者帳號。',
+    'summary': '建立新使用者 (管理員專用)',
+    'description': '供**管理員**建立新的使用者帳號（例如：呼吸治療師或其他管理員）。',
     'tags': ['Users'],
+    'security': [{'bearerAuth': []}],
     'parameters': [
         {
             'name': 'body',
@@ -18,92 +21,51 @@ users_bp = Blueprint('users', __name__)
             'required': True,
             'schema': {
                 'id': 'NewUser',
-                'required': ['username', 'email', 'password'],
                 'properties': {
-                    'username': {
-                        'type': 'string',
-                        'description': '使用者名稱',
-                        'example': 'john_doe'
-                    },
-                    'email': {
-                        'type': 'string',
-                        'description': '電子郵件地址',
-                        'example': 'john.doe@example.com'
-                    },
-                    'password': {
-                        'type': 'string',
-                        'description': '使用者密碼',
-                        'format': 'password',
-                        'example': 'strong_password_123'
-                    }
-                }
+                    'account': {'type': 'string', 'example': 'new_therapist_01'},
+                    'password': {'type': 'string', 'format': 'password', 'example': 'a_very_strong_password'},
+                    'first_name': {'type': 'string', 'example': '思敏'},
+                    'last_name': {'type': 'string', 'example': '王'},
+                    'email': {'type': 'string', 'example': 'sumin.wang@example.com'},
+                    'is_staff': {'type': 'boolean', 'example': True},
+                    'is_admin': {'type': 'boolean', 'example': False},
+                    'title': {'type': 'string', 'example': '呼吸治療師'}
+                },
+                'required': ['account', 'password', 'is_staff', 'is_admin']
             }
         }
     ],
     'responses': {
-        '201': {
-            'description': '使用者建立成功',
-            'schema': {
-                'properties': {
-                    'message': {'type': 'string'},
-                    'user': {
-                        'properties': {
-                            'id': {'type': 'integer'},
-                            'username': {'type': 'string'},
-                            'email': {'type': 'string'},
-                            'created_at': {'type': 'string', 'format': 'date-time'}
-                        }
-                    }
-                }
-            }
-        },
-        '400': {
-            'description': '請求無效或使用者已存在'
-        }
+        '201': {'description': '使用者建立成功'},
+        '400': {'description': '請求無效或使用者已存在'},
+        '401': {'description': '未提供 Token 或 Token 無效'},
+        '403': {'description': '沒有管理員權限'}
     }
 })
-def create_user_endpoint():
-    """建立新使用者"""
-    data = request.get_json()
-    user, message = user_service.create_user(data)
-    if not user:
-        return jsonify({"error": message}), 400
-    return jsonify({"message": message, "user": user.to_dict()}), 201
+def handle_create_user():
+    """建立新使用者 (管理員專用)"""
+    current_user_id = get_jwt_identity()
+    admin_user = get_user_by_id(current_user_id)
 
-@users_bp.route('/<int:user_id>', methods=['GET'])
-@swag_from({
-    'summary': '獲取使用者資訊',
-    'description': '根據使用者 ID 獲取單一使用者的詳細資訊。',
-    'tags': ['Users'],
-    'parameters': [
-        {
-            'name': 'user_id',
-            'in': 'path',
-            'type': 'integer',
-            'required': True,
-            'description': '要查詢的使用者 ID'
-        }
-    ],
-    'responses': {
-        '200': {
-            'description': '成功獲取使用者資訊',
-            'schema': {
-                'properties': {
-                    'id': {'type': 'integer'},
-                    'username': {'type': 'string'},
-                    'email': {'type': 'string'},
-                    'created_at': {'type': 'string', 'format': 'date-time'}
-                }
-            }
-        },
-        '404': {
-            'description': '找不到指定的使用者'
-        }
+    if not admin_user or not admin_user.is_admin:
+        return jsonify({"error": {"code": "PERMISSION_DENIED", "message": "Admin access required"}}), 403
+
+    data = request.get_json()
+    new_user, error_msg = create_user(data)
+
+    if error_msg:
+        status_code = 409 if "exists" in error_msg else 400
+        return jsonify({"error": {"code": "INVALID_INPUT", "message": error_msg}}), status_code
+
+    # to_dict() 方法需要添加到 User 模型中
+    user_data = {
+        "id": new_user.id,
+        "account": new_user.account,
+        "first_name": new_user.first_name,
+        "last_name": new_user.last_name,
+        "email": new_user.email,
+        "is_staff": new_user.is_staff,
+        "is_admin": new_user.is_admin,
+        "created_at": new_user.created_at.isoformat()
     }
-})
-def get_user_endpoint(user_id):
-    """獲取使用者資訊"""
-    user = user_service.get_user_by_id(user_id)
-    if not user:
-        return jsonify({"error": "User not found"}), 404
-    return jsonify(user.to_dict()), 200
+    return jsonify({"data": user_data}), 201
