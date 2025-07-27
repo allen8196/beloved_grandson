@@ -1,17 +1,19 @@
 # services/web-app/app/core/questionnaire_repository.py
+from sqlalchemy import select, extract
 from ..models.models import QuestionnaireCAT, QuestionnaireMMRC
-from ..utils.extensions import db
+from ..extensions import db
 from datetime import date
-from sqlalchemy import extract
+
 
 class QuestionnaireRepository:
     def find_cat_by_user_id_and_month(self, user_id: int, record_date: date) -> QuestionnaireCAT | None:
         """Finds a CAT record by user ID for a specific month and year."""
-        return QuestionnaireCAT.query.filter(
+        stmt = select(QuestionnaireCAT).filter(
             QuestionnaireCAT.user_id == user_id,
             extract('year', QuestionnaireCAT.record_date) == record_date.year,
             extract('month', QuestionnaireCAT.record_date) == record_date.month
-        ).first()
+        )
+        return db.session.scalars(stmt).first()
 
     def create_cat_record(self, user_id: int, data: dict, total_score: int) -> QuestionnaireCAT:
         """Creates a new CAT questionnaire record."""
@@ -60,11 +62,12 @@ class QuestionnaireRepository:
 
     def find_mmrc_by_user_id_and_month(self, user_id: int, record_date: date) -> QuestionnaireMMRC | None:
         """Finds an MMRC record by user ID for a specific month and year."""
-        return QuestionnaireMMRC.query.filter(
+        stmt = select(QuestionnaireMMRC).filter(
             QuestionnaireMMRC.user_id == user_id,
             extract('year', QuestionnaireMMRC.record_date) == record_date.year,
             extract('month', QuestionnaireMMRC.record_date) == record_date.month
-        ).first()
+        )
+        return db.session.scalars(stmt).first()
 
     def update_mmrc_record(self, record: QuestionnaireMMRC, data: dict) -> QuestionnaireMMRC:
         """Updates an existing MMRC record."""
@@ -75,20 +78,22 @@ class QuestionnaireRepository:
 
     def get_cat_records_by_user_id(self, user_id: int, page: int, per_page: int):
         """Retrieves paginated CAT records for a user."""
-        return QuestionnaireCAT.query.filter_by(user_id=user_id)\
-            .order_by(QuestionnaireCAT.record_date.desc())\
-            .paginate(page=page, per_page=per_page, error_out=False)
+        stmt = select(QuestionnaireCAT).filter_by(user_id=user_id)\
+            .order_by(QuestionnaireCAT.record_date.desc())
+        return db.paginate(stmt, page=page, per_page=per_page, error_out=False)
 
     def get_mmrc_records_by_user_id(self, user_id: int, page: int, per_page: int):
         """Retrieves paginated MMRC records for a user."""
-        return QuestionnaireMMRC.query.filter_by(user_id=user_id)\
-            .order_by(QuestionnaireMMRC.record_date.desc())\
-            .paginate(page=page, per_page=per_page, error_out=False)
+        stmt = select(QuestionnaireMMRC).filter_by(user_id=user_id)\
+            .order_by(QuestionnaireMMRC.record_date.desc())
+        return db.paginate(stmt, page=page, per_page=per_page, error_out=False)
 
     def find_cat_by_user_id_and_date(self, user_id: int, record_date: date) -> QuestionnaireCAT | None:
         """Finds a CAT record by user ID and a specific date."""
-        return QuestionnaireCAT.query.filter_by(user_id=user_id, record_date=record_date).first()
+        stmt = select(QuestionnaireCAT).filter_by(user_id=user_id, record_date=record_date)
+        return db.session.scalars(stmt).first()
 
     def find_mmrc_by_user_id_and_date(self, user_id: int, record_date: date) -> QuestionnaireMMRC | None:
         """Finds an MMRC record by user ID and a specific date."""
-        return QuestionnaireMMRC.query.filter_by(user_id=user_id, record_date=record_date).first()
+        stmt = select(QuestionnaireMMRC).filter_by(user_id=user_id, record_date=record_date)
+        return db.session.scalars(stmt).first()

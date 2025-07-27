@@ -3,3 +3,4 @@ pytest-mock
 requests
 boto3
 pika
+pymongo==4.8.0

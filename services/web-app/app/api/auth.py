@@ -2,8 +2,10 @@
 from flask import Blueprint, request, jsonify
 from flasgger import swag_from
 from flask_jwt_extended import create_access_token
+from werkzeug.exceptions import BadRequest
 from ..core.auth_service import login_user, login_line_user, register_line_user
 from datetime import timedelta
+import logging
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/api/v1/auth')
 
@@ -29,40 +31,54 @@ auth_bp = Blueprint('auth', __name__, url_prefix='/api/v1/auth')
     ],
     'responses': {
         '200': {'description': '登入成功'},
-        '401': {'description': '帳號或密碼錯誤'}
+        '400': {'description': '請求格式錯誤'},
+        '401': {'description': '帳號或密碼錯誤'},
+        '500': {'description': '伺服器內部錯誤'}
     }
 })
 def handle_login():
     """處理使用者登入"""
-    data = request.get_json()
-    account = data.get('account')
-    password = data.get('password')
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": {"code": "INVALID_INPUT", "message": "Request body must be JSON."}}), 400
 
-    user = login_user(account, password)
+        account = data.get('account')
+        password = data.get('password')
 
-    if not user:
-        return jsonify({"error": {"code": "INVALID_CREDENTIALS", "message": "Invalid account or password."}}), 401
+        if not account or not password:
+            return jsonify({"error": {"code": "INVALID_INPUT", "message": "Account and password are required."}}), 400
 
-    identity = str(user.id)
-    expires = timedelta(hours=1)
-    access_token = create_access_token(identity=identity, expires_delta=expires)
+        user = login_user(account, password)
 
-    user_info = {
-        "id": user.id,
-        "account": user.account,
-        "first_name": user.first_name,
-        "last_name": user.last_name,
-    }
-    if user.is_staff and hasattr(user, 'staff_details') and user.staff_details:
-        user_info['title'] = user.staff_details.title
+        if not user:
+            return jsonify({"error": {"code": "INVALID_CREDENTIALS", "message": "Invalid account or password."}}), 401
 
-    return jsonify({
-        "data": {
-            "token": access_token,
-            "expires_in": expires.total_seconds(),
-            "user": user_info
+        identity = str(user.id)
+        expires = timedelta(hours=1)
+        access_token = create_access_token(identity=identity, expires_delta=expires)
+
+        user_info = {
+            "id": user.id,
+            "account": user.account,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
         }
-    }), 200
+        if user.is_staff and hasattr(user, 'staff_details') and user.staff_details:
+            user_info['title'] = user.staff_details.title
+
+        return jsonify({
+            "data": {
+                "token": access_token,
+                "expires_in": expires.total_seconds(),
+                "user": user_info
+            }
+        }), 200
+    except BadRequest:
+        return jsonify({"error": {"code": "BAD_REQUEST", "message": "Invalid JSON format."}}), 400
+    except Exception as e:
+        logging.error(f"An unexpected error occurred during login: {e}", exc_info=True)
+        return jsonify({"error": {"code": "INTERNAL_SERVER_ERROR", "message": "An unexpected error occurred."}}), 500
 
 @auth_bp.route('/line/login', methods=['POST'])
 @swag_from({

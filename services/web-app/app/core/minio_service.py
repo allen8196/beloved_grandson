@@ -29,14 +29,17 @@ def generate_presigned_upload_url(bucket_name, object_name=None, expiration=3600
     try:
         # 確保 bucket 存在
         # 在生產環境中，bucket 應該預先建立好
-        try:
-            s3_client.head_bucket(Bucket=bucket_name)
-        except ClientError as e:
-            if e.response['Error']['Code'] == '404':
-                s3_client.create_bucket(Bucket=bucket_name)
-            else:
-                raise
+        s3_client.head_bucket(Bucket=bucket_name)
+    except ClientError as e:
+        # 如果 bucket 不存在 (404)，則建立它
+        if e.response['Error']['Code'] == '404':
+            s3_client.create_bucket(Bucket=bucket_name)
+        else:
+            # 如果是其他 ClientError，直接向上拋出
+            print(f"Error checking bucket: {e}")
+            raise
 
+    try:
         # 生成預簽章 URL，使用 PUT 方法
         response = s3_client.generate_presigned_url(
             'put_object',
@@ -45,7 +48,7 @@ def generate_presigned_upload_url(bucket_name, object_name=None, expiration=3600
             HttpMethod='PUT'
         )
     except ClientError as e:
-        # 記錄錯誤
+        # 記錄生成 URL 時的錯誤
         print(f"Error generating presigned URL: {e}")
         return None
 

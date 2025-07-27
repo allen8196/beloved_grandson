@@ -1,6 +1,6 @@
 # services/web-app/app/models/models.py
-from ..utils.extensions import db
-from datetime import datetime
+from ..extensions import db
+from datetime import datetime, timezone
 from werkzeug.security import generate_password_hash, check_password_hash
 
 class User(db.Model):
@@ -17,8 +17,8 @@ class User(db.Model):
     phone = db.Column(db.String(20))
     last_login = db.Column(db.DateTime)
     line_user_id = db.Column(db.String(255), unique=True, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     health_profile = db.relationship('HealthProfile', backref='user', foreign_keys='HealthProfile.user_id', uselist=False, cascade="all, delete-orphan")
     staff_details = db.relationship('StaffDetail', backref='user', uselist=False, cascade="all, delete-orphan")
@@ -54,7 +54,7 @@ class HealthProfile(db.Model):
     weight_kg = db.Column(db.Integer)
     smoke_status = db.Column(db.String(10)) # e.g., 'never', 'quit', 'current'
     staff_id = db.Column(db.Integer, db.ForeignKey('users.id'))
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     managing_staff = db.relationship('User', foreign_keys=[staff_id], backref='managed_profiles')
 
@@ -72,8 +72,8 @@ class DailyMetric(db.Model):
     medication = db.Column(db.Boolean)
     exercise_min = db.Column(db.Integer)
     cigarettes = db.Column(db.Integer)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 class QuestionnaireMMRC(db.Model):
     __tablename__ = 'questionnaire_mmrc'
@@ -82,7 +82,7 @@ class QuestionnaireMMRC(db.Model):
     score = db.Column(db.SmallInteger, nullable=False)
     answer_text = db.Column(db.Text)
     record_date = db.Column(db.Date, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 class QuestionnaireCAT(db.Model):
     __tablename__ = 'questionnaire_cat'
@@ -98,4 +98,4 @@ class QuestionnaireCAT(db.Model):
     energy_score = db.Column(db.SmallInteger, nullable=False)
     total_score = db.Column(db.SmallInteger, nullable=False)
     record_date = db.Column(db.Date, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))

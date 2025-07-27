@@ -1,6 +1,6 @@
 # services/web-app/app/core/patient_repository.py
 from ..models import User, HealthProfile
-from ..utils.extensions import db
+from ..extensions import db
 
 class PatientRepository:
     def find_all_by_therapist_id(self, therapist_id, page, per_page, sort_by, order):

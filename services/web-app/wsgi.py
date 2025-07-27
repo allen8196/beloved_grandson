@@ -10,7 +10,7 @@ if os.path.exists(dotenv_path):
     load_dotenv(dotenv_path)
 
 from app.app import create_app
-from app.utils.extensions import socketio
+from app.extensions import socketio
 from app.core.notification_service import start_notification_listener
 
 # 建立 Flask app instance

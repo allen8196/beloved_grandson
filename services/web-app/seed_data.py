@@ -6,7 +6,7 @@ from faker import Faker
 from tqdm import tqdm
 
 from app.app import create_app
-from app.utils.extensions import db
+from app.extensions import db
 from app.models.models import User, StaffDetail, HealthProfile, DailyMetric, QuestionnaireCAT, QuestionnaireMMRC
 
 # --- 配置 ---

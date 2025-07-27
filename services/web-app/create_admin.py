@@ -1,9 +1,9 @@
 # create_admin.py
 from app.app import create_app
 from app.models import User
-from app.utils.extensions import db
+from app.extensions import db
 
-app = create_app()
+app, socketio = create_app()
 
 with app.app_context():
     if User.query.filter_by(account='admin').first():

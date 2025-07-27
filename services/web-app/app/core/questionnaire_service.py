@@ -24,6 +24,18 @@ class QuestionnaireService:
     def submit_cat_questionnaire(self, patient_id: int, data: dict):
         if not self._validate_and_get_patient(patient_id):
             return None, "Patient not found."
+        
+        # --- START: ADDED VALIDATION ---
+        score_fields = [
+            'cough_score', 'phlegm_score', 'chest_score', 'breath_score',
+            'limit_score', 'confidence_score', 'sleep_score', 'energy_score'
+        ]
+        for field in score_fields:
+            score = data.get(field)
+            if not isinstance(score, int) or not (0 <= score <= 5):
+                return None, f"Invalid score for {field}. Must be an integer between 0 and 5."
+        # --- END: ADDED VALIDATION ---
+
         try:
             record_date = date.fromisoformat(data['record_date'])
         except (ValueError, KeyError):
@@ -57,6 +69,13 @@ class QuestionnaireService:
     def submit_mmrc_questionnaire(self, patient_id: int, data: dict):
         if not self._validate_and_get_patient(patient_id):
             return None, "Patient not found."
+        
+        # --- START: ADDED VALIDATION ---
+        score = data.get('score')
+        if not isinstance(score, int) or not (0 <= score <= 4):
+            return None, "Invalid score. Must be an integer between 0 and 4."
+        # --- END: ADDED VALIDATION ---
+
         try:
             record_date = date.fromisoformat(data['record_date'])
         except (ValueError, KeyError):

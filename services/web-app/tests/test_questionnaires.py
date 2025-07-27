@@ -2,7 +2,111 @@
 import pytest
 from datetime import date, datetime, timedelta
 from app.models.models import User, HealthProfile, QuestionnaireCAT, QuestionnaireMMRC
-from app.utils.extensions import db
+from app.extensions import db
+
+
+class TestQuestionnairePermissions:
+    """T-7.2.1: Test suite for questionnaire API permissions."""
+
+    @pytest.mark.parametrize("method, path_template", [
+        ("GET", "/api/v1/patients/{patient_id}/questionnaires/cat"),
+        ("POST", "/api/v1/patients/{patient_id}/questionnaires/cat"),
+        ("PUT", "/api/v1/patients/{patient_id}/questionnaires/cat/2025/7"),
+        ("GET", "/api/v1/patients/{patient_id}/questionnaires/mmrc"),
+        ("POST", "/api/v1/patients/{patient_id}/questionnaires/mmrc"),
+        ("PUT", "/api/v1/patients/{patient_id}/questionnaires/mmrc/2025/7"),
+    ])
+    def test_unauthenticated_access_is_denied(self, client, setup_questionnaires, method, path_template):
+        """T-7.2.1: Ensure unauthenticated users receive a 401 Unauthorized error."""
+        patient = setup_questionnaires["patient1"]
+        path = path_template.format(patient_id=patient.id)
+
+        if method == "GET":
+            res = client.get(path)
+        elif method == "POST":
+            res = client.post(path, json={})
+        elif method == "PUT":
+            res = client.put(path, json={})
+
+        assert res.status_code == 401, f"Expected 401 for {method} {path}, but got {res.status_code}"
+        assert "Missing Authorization Header" in res.json['msg']
+
+
+    @pytest.mark.parametrize("method, path_template", [
+        ("GET", "/api/v1/patients/{patient_id}/questionnaires/cat"),
+        ("POST", "/api/v1/patients/{patient_id}/questionnaires/cat"),
+        ("PUT", "/api/v1/patients/{patient_id}/questionnaires/cat/2025/7"),
+        ("GET", "/api/v1/patients/{patient_id}/questionnaires/mmrc"),
+        ("POST", "/api/v1/patients/{patient_id}/questionnaires/mmrc"),
+        ("PUT", "/api/v1/patients/{patient_id}/questionnaires/mmrc/2025/7"),
+    ])
+    def test_forbidden_access_is_denied(self, client, setup_questionnaires, method, path_template):
+        """T-7.2.1: Ensure users cannot access other patients' data."""
+        # patient_q logs in
+        login_res = client.post('/api/v1/auth/login', json={'account': 'patient_q', 'password': 'password'})
+        access_token = login_res.json['data']['token']
+        headers = {'Authorization': f'Bearer {access_token}'}
+
+        # But tries to access patient_q2's data
+        patient2 = setup_questionnaires["patient2"]
+        path = path_template.format(patient_id=patient2.id)
+
+        if method == "GET":
+            res = client.get(path, headers=headers)
+        elif method == "POST":
+            res = client.post(path, json={}, headers=headers)
+        elif method == "PUT":
+            res = client.put(path, json={}, headers=headers)
+
+        assert res.status_code == 403, f"Expected 403 for {method} {path}, but got {res.status_code}"
+        assert "You are not authorized to access this resource" in res.json['error']['message']
+
+
+class TestQuestionnaireValidation:
+    """T-7.2.1: Test suite for questionnaire data validation."""
+
+    def test_submit_cat_with_invalid_score_is_rejected(self, client, setup_questionnaires):
+        """T-7.2.1: Ensure submitting a CAT with out-of-range scores returns a 400 error."""
+        patient = setup_questionnaires["patient1"]
+
+        login_res = client.post('/api/v1/auth/login', json={'account': 'patient_q', 'password': 'password'})
+        access_token = login_res.json['data']['token']
+        headers = {'Authorization': f'Bearer {access_token}'}
+
+        today_str = date.today().isoformat()
+        # One score is invalid (e.g., 6, which is > 5)
+        data = {
+            "record_date": today_str,
+            "cough_score": 1, "phlegm_score": 1, "chest_score": 1, "breath_score": 1,
+            "limit_score": 1, "confidence_score": 1, "sleep_score": 1, "energy_score": 6
+        }
+
+        res = client.post(f'/api/v1/patients/{patient.id}/questionnaires/cat', json=data, headers=headers)
+
+        assert res.status_code == 400
+        assert "Invalid score" in res.json['error']['message']
+
+    def test_submit_mmrc_with_invalid_score_is_rejected(self, client, setup_questionnaires):
+        """T-7.2.1: Ensure submitting an MMRC with an out-of-range score returns a 400 error."""
+        patient = setup_questionnaires["patient1"]
+
+        login_res = client.post('/api/v1/auth/login', json={'account': 'patient_q', 'password': 'password'})
+        access_token = login_res.json['data']['token']
+        headers = {'Authorization': f'Bearer {access_token}'}
+
+        today_str = date.today().isoformat()
+        # Score is invalid (e.g., 5, which is > 4)
+        data = {
+            "record_date": today_str,
+            "score": 5,
+            "answer_text": "Invalid score test"
+        }
+
+        res = client.post(f'/api/v1/patients/{patient.id}/questionnaires/mmrc', json=data, headers=headers)
+
+        assert res.status_code == 400
+        assert "Invalid score" in res.json['error']['message']
+
 
 # Helper functions from other test files can be consolidated later
 def create_user(account, password, is_staff=False, is_admin=False, first_name="Test", last_name="User"):

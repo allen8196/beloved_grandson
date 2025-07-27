@@ -3,6 +3,29 @@ from .daily_metric_repository import DailyMetricRepository
 from .user_repository import UserRepository
 from datetime import datetime, date, timedelta
 
+def _validate_metric_data(data):
+    """
+    Validates the data types for daily metric fields.
+    Returns an error message string if validation fails, otherwise None.
+    """
+    expected_types = {
+        'water_cc': int,
+        'medication': bool,
+        'exercise_min': int,
+        'cigarettes': int
+    }
+    errors = []
+    for field, expected_type in expected_types.items():
+        if field in data and data[field] is not None:
+            value = data[field]
+            if not isinstance(value, expected_type):
+                errors.append(f"'{field}' must be of type {expected_type.__name__}, but got {type(value).__name__}.")
+            # Additional value checks
+            if isinstance(value, int) and value < 0:
+                errors.append(f"'{field}' cannot be negative.")
+    
+    return "; ".join(errors) if errors else None
+
 class DailyMetricService:
     def __init__(self):
         self.metric_repo = DailyMetricRepository()
@@ -11,8 +34,12 @@ class DailyMetricService:
     def create_daily_metric(self, patient_id, data):
         """
         Handles the business logic for creating a daily metric.
-        Checks if a metric for the current day already exists.
+        Validates input data and checks if a metric for the current day already exists.
         """
+        validation_error = _validate_metric_data(data)
+        if validation_error:
+            return None, validation_error
+
         patient = self.user_repo.find_by_id(patient_id)
         if not patient or patient.is_staff:
             return None, "Patient not found."
@@ -60,7 +87,12 @@ class DailyMetricService:
     def update_daily_metric(self, patient_id, log_date_str, data):
         """
         Handles the business logic for updating a daily metric for a specific date.
+        Validates input data before proceeding.
         """
+        validation_error = _validate_metric_data(data)
+        if validation_error:
+            return None, validation_error
+            
         try:
             log_date = datetime.strptime(log_date_str, '%Y-%m-%d').date()
         except ValueError:

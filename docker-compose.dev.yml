@@ -97,6 +97,24 @@ services:
       - "19530:19530"
       - "9091:9091"
 
+  mongodb:
+    image: mongo:latest
+    container_name: dev_mongodb
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
+    ports:
+      - "27017:27017"
+    volumes:
+      - dev_mongodb_data:/data/db
+    restart: unless-stopped
+    healthcheck:
+      test: |
+        mongosh --host localhost:27017 --eval "db.adminCommand('ping')" --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # -------------------------------------------------
   #  2. 應用程式層 (開發模式)
   # -------------------------------------------------
@@ -107,6 +125,8 @@ services:
     container_name: dev_web_app_service
     ports:
       - "5000:5000"
+    env_file:
+      - .env
     volumes:
       # 掛載本地程式碼到容器中，實現熱重載
       - ./services/web-app:/usr/src/app
@@ -114,6 +134,7 @@ services:
       - FLASK_ENV=development # 啟用 Flask 開發模式
       - DATABASE_URL=postgresql://${POSTGRES_ADMIN_USER}:${POSTGRES_ADMIN_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - REDIS_URL=redis://redis:6379
+      - MONGO_URL=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
       - RABBITMQ_NOTIFICATION_QUEUE=notifications_queue
       - RABBITMQ_QUEUE=task_queue
@@ -123,6 +144,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      mongodb:
+        condition: service_healthy
     command: python wsgi.py
 
   ai-worker:
@@ -130,12 +153,15 @@ services:
       context: ./services/ai-worker
       dockerfile: Dockerfile
     container_name: dev_ai_worker_service
+    env_file:
+      - .env
     volumes:
       # 掛載本地程式碼，若有修改可重啟容器生效
       - ./services/ai-worker:/app
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_ADMIN_USER}:${POSTGRES_ADMIN_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - REDIS_URL=redis://redis:6379
+      - MONGO_URL=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
       - LLM_SERVICE_URL=http://llm-service:8000
       - STT_SERVICE_URL=http://stt-service:8000
@@ -151,6 +177,7 @@ services:
       - rabbitmq
       - postgres
       - redis
+      - mongodb
       - llm-service
       - stt-service
       - tts-service
@@ -214,3 +241,4 @@ volumes:
   dev_milvusdata:
   dev_minio:
   dev_etcd:
+  dev_mongodb_data:

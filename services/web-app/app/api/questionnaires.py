@@ -1,14 +1,36 @@
 # services/web-app/app/api/questionnaires.py
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
+from functools import wraps
 from ..core.questionnaire_service import QuestionnaireService
 from flasgger import swag_from
 
 questionnaires_bp = Blueprint('questionnaires', __name__, url_prefix='/api/v1/patients')
 
+def authorize_patient_access(fn):
+    """Decorator to check if the current user can access the patient's data."""
+    @wraps(fn)
+    def wrapper(patient_id, *args, **kwargs):
+        current_user_id = get_jwt_identity()
+        jwt_payload = get_jwt()
+        current_user_roles = jwt_payload.get('roles', [])
+
+        # Allow access if the user is accessing their own data, or if they are staff/admin
+        if int(current_user_id) == patient_id or 'staff' in current_user_roles or 'admin' in current_user_roles:
+            return fn(patient_id, *args, **kwargs)
+        else:
+            return jsonify({
+                "error": {
+                    "code": "FORBIDDEN",
+                    "message": "You are not authorized to access this resource."
+                }
+            }), 403
+    return wrapper
+
 #<editor-fold desc="CAT Questionnaire Endpoints">
 @questionnaires_bp.route('/<int:patient_id>/questionnaires/cat', methods=['GET'])
 @jwt_required()
+@authorize_patient_access
 @swag_from({
     'summary': '獲取 CAT 問卷歷史記錄 (Get CAT History)',
     'description': '獲取指定病患的所有歷史 CAT 問卷記錄，用於繪製分數趨勢圖。',
@@ -29,7 +51,7 @@ questionnaires_bp = Blueprint('questionnaires', __name__, url_prefix='/api/v1/pa
 def get_cat_history(patient_id):
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 12, type=int)
-    
+
     service = QuestionnaireService()
     paginated_records, error = service.get_cat_history(patient_id, page, per_page)
 
@@ -66,6 +88,7 @@ def get_cat_history(patient_id):
 
 @questionnaires_bp.route('/<int:patient_id>/questionnaires/cat', methods=['POST'])
 @jwt_required()
+@authorize_patient_access
 @swag_from({
     'summary': '提交 CAT 問卷 (Submit CAT Questionnaire)',
     'description': '提交一份新的 CAT 問卷。如果當月已存在記錄，將回傳 409 Conflict。',
@@ -104,10 +127,6 @@ def get_cat_history(patient_id):
     'security': [{'bearerAuth': []}]
 })
 def submit_cat(patient_id):
-    current_user_id = get_jwt_identity()
-    if int(current_user_id) != patient_id:
-        return jsonify({"error": {"code": "PERMISSION_DENIED", "message": "You can only submit questionnaires for yourself."}}), 403
-
     data = request.get_json()
     if not data:
         return jsonify({"error": {"code": "INVALID_INPUT", "message": "Request body cannot be empty."}}), 400
@@ -132,6 +151,7 @@ def submit_cat(patient_id):
 
 @questionnaires_bp.route('/<int:patient_id>/questionnaires/cat/<int:year>/<int:month>', methods=['PUT'])
 @jwt_required()
+@authorize_patient_access
 @swag_from({
     'summary': '更新指定月份的 CAT 問卷 (Update CAT Questionnaire for a specific month)',
     'description': '更新指定年月份的 CAT 問卷。',
@@ -157,10 +177,6 @@ def submit_cat(patient_id):
     'security': [{'bearerAuth': []}]
 })
 def update_cat(patient_id, year, month):
-    current_user_id = get_jwt_identity()
-    if int(current_user_id) != patient_id:
-        return jsonify({"error": {"code": "PERMISSION_DENIED", "message": "You can only update questionnaires for yourself."}}), 403
-
     data = request.get_json()
     if not data:
         return jsonify({"error": {"code": "INVALID_INPUT", "message": "Request body cannot be empty."}}), 400
@@ -185,6 +201,7 @@ def update_cat(patient_id, year, month):
 #<editor-fold desc="MMRC Questionnaire Endpoints">
 @questionnaires_bp.route('/<int:patient_id>/questionnaires/mmrc', methods=['GET'])
 @jwt_required()
+@authorize_patient_access
 @swag_from({
     'summary': '獲取 MMRC 問卷歷史記錄 (Get MMRC History)',
     'description': '獲取指定病患的所有歷史 MMRC 問卷記錄。',
@@ -205,7 +222,7 @@ def update_cat(patient_id, year, month):
 def get_mmrc_history(patient_id):
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 12, type=int)
-    
+
     service = QuestionnaireService()
     paginated_records, error = service.get_mmrc_history(patient_id, page, per_page)
 
@@ -233,6 +250,7 @@ def get_mmrc_history(patient_id):
 
 @questionnaires_bp.route('/<int:patient_id>/questionnaires/mmrc', methods=['POST'])
 @jwt_required()
+@authorize_patient_access
 @swag_from({
     'summary': '提交 MMRC 問卷 (Submit MMRC Questionnaire)',
     'description': '提交一份新的 MMRC 問卷。如果當月已存在記錄，將回傳 409 Conflict。',
@@ -265,10 +283,6 @@ def get_mmrc_history(patient_id):
     'security': [{'bearerAuth': []}]
 })
 def submit_mmrc(patient_id):
-    current_user_id = get_jwt_identity()
-    if int(current_user_id) != patient_id:
-        return jsonify({"error": {"code": "PERMISSION_DENIED", "message": "You can only submit questionnaires for yourself."}}), 403
-
     data = request.get_json()
     if not data:
         return jsonify({"error": {"code": "INVALID_INPUT", "message": "Request body cannot be empty."}}), 400
@@ -292,6 +306,7 @@ def submit_mmrc(patient_id):
 
 @questionnaires_bp.route('/<int:patient_id>/questionnaires/mmrc/<int:year>/<int:month>', methods=['PUT'])
 @jwt_required()
+@authorize_patient_access
 @swag_from({
     'summary': '更新指定月份的 MMRC 問卷 (Update MMRC Questionnaire for a specific month)',
     'description': '更新指定年月份的 MMRC 問卷。',
@@ -317,10 +332,6 @@ def submit_mmrc(patient_id):
     'security': [{'bearerAuth': []}]
 })
 def update_mmrc(patient_id, year, month):
-    current_user_id = get_jwt_identity()
-    if int(current_user_id) != patient_id:
-        return jsonify({"error": {"code": "PERMISSION_DENIED", "message": "You can only update questionnaires for yourself."}}), 403
-
     data = request.get_json()
     if not data:
         return jsonify({"error": {"code": "INVALID_INPUT", "message": "Request body cannot be empty."}}), 400

@@ -2,13 +2,14 @@
 
 from flask import Flask, jsonify
 from .config import config
-from .utils.extensions import db, migrate, swagger, jwt, socketio
+from .extensions import db, migrate, swagger, jwt, socketio, init_mongo
 from .api.auth import auth_bp
 from .api.patients import patients_bp
 from .api.questionnaires import questionnaires_bp
 from .api.uploads import uploads_bp
 from .api.users import users_bp
 from .api.daily_metrics import daily_metrics_bp
+from .api.chat import bp as chat_bp # Explicitly import and alias the blueprint
 
 def create_app(config_name='default'):
     """
@@ -24,16 +25,10 @@ def create_app(config_name='default'):
     migrate.init_app(app, db)
     swagger.init_app(app)
     jwt.init_app(app)
-    socketio.init_app(app, async_mode='gevent', cors_allowed_origins="*")
 
-    # Register Blueprints
-    from .api.users import users_bp
-    from .api.auth import auth_bp
-    from .api.patients import patients_bp
-    from .api.questionnaires import questionnaires_bp
-    from .api.daily_metrics import daily_metrics_bp
-    from .api.uploads import uploads_bp
-    from .api.chat import bp as chat_bp # Explicitly import and alias the blueprint
+    init_mongo()
+
+    socketio.init_app(app, async_mode='gevent', cors_allowed_origins="*")
 
     app.register_blueprint(users_bp)
     app.register_blueprint(auth_bp)

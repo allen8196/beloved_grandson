@@ -1,18 +1,21 @@
 # services/web-app/app/core/daily_metric_repository.py
+from sqlalchemy import select
 from ..models.models import DailyMetric
-from ..utils.extensions import db
-from datetime import datetime, date
+from ..extensions import db
+from datetime import datetime, date, timezone
 
 class DailyMetricRepository:
     def find_by_user_id_and_date(self, user_id: int, record_date: date):
         """Finds a daily metric by user ID and a specific date."""
         start_of_day = datetime.combine(record_date, datetime.min.time())
         end_of_day = datetime.combine(record_date, datetime.max.time())
-        return DailyMetric.query.filter(
+        
+        stmt = select(DailyMetric).filter(
             DailyMetric.user_id == user_id,
             DailyMetric.created_at >= start_of_day,
             DailyMetric.created_at <= end_of_day
-        ).first()
+        )
+        return db.session.scalars(stmt).first()
 
     def create_daily_metric(self, user_id, data):
         """
@@ -53,13 +56,13 @@ class DailyMetricRepository:
         start_of_day = datetime.combine(start_date, datetime.min.time())
         end_of_day = datetime.combine(end_date, datetime.max.time())
         
-        query = DailyMetric.query.filter(
+        stmt = select(DailyMetric).filter(
             DailyMetric.user_id == user_id,
             DailyMetric.created_at >= start_of_day,
             DailyMetric.created_at <= end_of_day
         ).order_by(DailyMetric.created_at.desc())
 
-        return query.paginate(page=page, per_page=per_page, error_out=False)
+        return db.paginate(stmt, page=page, per_page=per_page, error_out=False)
 
     def update_daily_metric(self, metric, data):
         """Updates an existing daily metric record."""
@@ -67,7 +70,7 @@ class DailyMetricRepository:
         metric.medication = data.get('medication', metric.medication)
         metric.exercise_min = data.get('exercise_min', metric.exercise_min)
         metric.cigarettes = data.get('cigarettes', metric.cigarettes)
-        metric.updated_at = datetime.utcnow()
+        metric.updated_at = datetime.now(timezone.utc)
         db.session.commit()
         return metric
 

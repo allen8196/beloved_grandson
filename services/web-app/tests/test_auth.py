@@ -227,3 +227,138 @@ def test_admin_create_user_conflict(client, admin_token):
 
     # Assert
     assert response.status_code == 409
+
+
+# --- Line Login Tests ---
+
+@pytest.fixture(scope="function")
+def line_user(session):
+    """建立一個已註冊的 LINE 使用者"""
+    user = User(
+        line_user_id='U_registered_line_user',
+        account='line_user_account',
+        first_name='LINE',
+        last_name='使用者'
+    )
+    user.set_password('any_password')
+    session.add(user)
+    session.commit()
+    return user
+
+def test_line_login_success(client, line_user):
+    """
+    測試案例: 已註冊的 LINE 使用者成功登入
+    """
+    # Arrange
+    data = {"lineUserId": "U_registered_line_user"}
+
+    # Act
+    response = client.post('/api/v1/auth/line/login', data=json.dumps(data), content_type='application/json')
+
+    # Assert
+    assert response.status_code == 200
+    json_data = response.get_json()
+    assert 'token' in json_data['data']
+    assert json_data['data']['user']['line_user_id'] == 'U_registered_line_user'
+
+def test_line_login_not_found(client, db):
+    """
+    測試案例: 未註冊的 LINE 使用者嘗試登入
+    """
+    # Arrange
+    data = {"lineUserId": "U_unregistered_line_user"}
+
+    # Act
+    response = client.post('/api/v1/auth/line/login', data=json.dumps(data), content_type='application/json')
+
+    # Assert
+    assert response.status_code == 404
+    json_data = response.get_json()
+    assert json_data['error']['code'] == 'USER_NOT_FOUND'
+
+def test_line_login_missing_id(client, db):
+    """
+    測試案例: LINE 登入請求缺少 lineUserId
+    """
+    # Arrange
+    data = {"another_field": "some_value"}
+
+    # Act
+    response = client.post('/api/v1/auth/line/login', data=json.dumps(data), content_type='application/json')
+
+    # Assert
+    assert response.status_code == 400
+    json_data = response.get_json()
+    assert json_data['error']['code'] == 'INVALID_INPUT'
+
+# --- Error Handling and Edge Case Tests ---
+
+def test_login_invalid_json(client):
+    """
+    測試案例: 登入請求的 body 不是有效的 JSON
+    """
+    # Arrange
+    data = "this is not json"
+
+    # Act
+    response = client.post('/api/v1/auth/login', data=data, content_type='application/json')
+
+    # Assert
+    assert response.status_code == 400
+    json_data = response.get_json()
+    assert json_data['error']['code'] == 'BAD_REQUEST'
+
+def test_login_missing_credentials(client):
+    """
+    測試案例: 登入請求缺少帳號或密碼
+    """
+    # Arrange
+    data = {"account": "some_user"} # Missing password
+
+    # Act
+    response = client.post('/api/v1/auth/login', data=json.dumps(data), content_type='application/json')
+
+    # Assert
+    assert response.status_code == 400
+    json_data = response.get_json()
+    assert json_data['error']['code'] == 'INVALID_INPUT'
+
+def test_login_service_exception(client, monkeypatch, therapist):
+    """
+    測試案例: 登入過程中，核心服務層拋出未預期的例外
+    """
+    # Arrange
+    def mock_login_user(account, password):
+        raise Exception("Database connection failed")
+    
+    monkeypatch.setattr('app.api.auth.login_user', mock_login_user)
+    
+    data = {"account": "any_user", "password": "any_password"}
+
+    # Act
+    response = client.post('/api/v1/auth/login', data=json.dumps(data), content_type='application/json')
+
+    # Assert
+    assert response.status_code == 500
+    json_data = response.get_json()
+    assert json_data['error']['code'] == 'INTERNAL_SERVER_ERROR'
+
+def test_login_jwt_creation_exception(client, monkeypatch, therapist):
+    """
+    測試案例: 成功驗證使用者後，生成 JWT 時發生例外
+    """
+    # Arrange
+    def mock_create_token(identity, expires_delta):
+        raise Exception("JWT secret key is misconfigured")
+
+    monkeypatch.setattr('app.api.auth.create_access_token', mock_create_token)
+
+    data = {"account": therapist.account, "password": "good_password"}
+
+    # Act
+    response = client.post('/api/v1/auth/login', data=json.dumps(data), content_type='application/json')
+
+    # Assert
+    assert response.status_code == 500
+    json_data = response.get_json()
+    assert json_data['error']['code'] == 'INTERNAL_SERVER_ERROR'

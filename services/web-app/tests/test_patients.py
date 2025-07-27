@@ -1,7 +1,7 @@
 import pytest
 from app.models.models import User, HealthProfile, StaffDetail
-from app.utils.extensions import db
-from datetime import datetime, timedelta
+from app.extensions import db
+from datetime import datetime, timedelta, timezone
 
 def create_user(account, password, is_staff=False, is_admin=False, first_name="Test", last_name="User"):
     """Helper function to create a user."""
@@ -162,9 +162,9 @@ def test_get_therapist_patients_sorting(client, setup_patients):
 
 
     # Manually update created_at for predictable sorting
-    patient1.created_at = datetime.utcnow() - timedelta(days=3)
-    patient2.created_at = datetime.utcnow() - timedelta(days=1)
-    patient3.created_at = datetime.utcnow() - timedelta(days=2)
+    patient1.created_at = datetime.now(timezone.utc) - timedelta(days=3)
+    patient2.created_at = datetime.now(timezone.utc) - timedelta(days=1)
+    patient3.created_at = datetime.now(timezone.utc) - timedelta(days=2)
     db.session.commit()
 
     login_res = client.post('/api/v1/auth/login', json={'account': 'therapist1', 'password': 'password'})
