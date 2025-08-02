@@ -24,7 +24,7 @@ class QuestionnaireService:
     def submit_cat_questionnaire(self, patient_id: int, data: dict):
         if not self._validate_and_get_patient(patient_id):
             return None, "Patient not found."
-        
+
         # --- START: ADDED VALIDATION ---
         score_fields = [
             'cough_score', 'phlegm_score', 'chest_score', 'breath_score',
@@ -49,10 +49,10 @@ class QuestionnaireService:
     def update_cat_questionnaire(self, patient_id: int, year: int, month: int, data: dict):
         if not self._validate_and_get_patient(patient_id):
             return None, "Patient not found."
-        
+
         record_to_find = date(year, month, 1)
         record_to_update = self.questionnaire_repo.find_cat_by_user_id_and_month(patient_id, record_to_find)
-        
+
         if not record_to_update:
             return None, f"No CAT record found for {year}-{month} to update."
 
@@ -69,7 +69,7 @@ class QuestionnaireService:
     def submit_mmrc_questionnaire(self, patient_id: int, data: dict):
         if not self._validate_and_get_patient(patient_id):
             return None, "Patient not found."
-        
+
         # --- START: ADDED VALIDATION ---
         score = data.get('score')
         if not isinstance(score, int) or not (0 <= score <= 4):
@@ -88,13 +88,13 @@ class QuestionnaireService:
     def update_mmrc_questionnaire(self, patient_id: int, year: int, month: int, data: dict):
         if not self._validate_and_get_patient(patient_id):
             return None, "Patient not found."
-            
+
         record_to_find = date(year, month, 1)
         record_to_update = self.questionnaire_repo.find_mmrc_by_user_id_and_month(patient_id, record_to_find)
 
         if not record_to_update:
             return None, f"No MMRC record found for {year}-{month} to update."
-            
+
         data['record_date'] = record_to_update.record_date.isoformat()
         updated_record = self.questionnaire_repo.update_mmrc_record(record_to_update, data)
         return updated_record, None

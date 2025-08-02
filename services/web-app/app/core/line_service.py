@@ -188,7 +188,6 @@ class LineService:
                 if duration_ms > 0:
                     metadata['duration-ms'] = str(duration_ms)
 
-
                 # 將語音檔案內容上傳到 Minio 物件儲存
                 minio_service.upload_file_content(
                     bucket_name=bucket_name,
@@ -336,10 +335,9 @@ class LineService:
             current_app.logger.error("環境變數 DOMAIN_NAME 未設定，無法產生公開音訊 URL。")
             return
 
-        bucket_name = 'audio-uploads'
+        bucket_name = 'audio-bucket'
         # 直接組合公開的 URL，格式為 https://<你的域名>/<儲存桶名>/<物件名>
-        audio_url = f"{BASE_URL}{bucket_name}/{object_name}"
-
+        audio_url = f"{BASE_URL}/{bucket_name}/{object_name}"
         try:
             with ApiClient(self.configuration) as api_client:
                 push_message_request = PushMessageRequest(

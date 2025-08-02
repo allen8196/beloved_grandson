@@ -1,8 +1,0 @@
-fastapi
-uvicorn
-pytest
-pytest-mock
-httpx
-python-multipart # 用於處理檔案上傳
-pika
-minio

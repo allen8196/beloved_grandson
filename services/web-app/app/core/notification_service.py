@@ -45,11 +45,10 @@ def message_callback(ch, method, properties, body, app):
             line_service = get_line_service()
 
             # 根據通知內容決定要傳送文字還是音訊
-            # response_audio_url 原始訊息，object_name AI生成的訊息
-            response_audio_url = message.get("object_name")
+            response_audio_url = message.get("response_audio_url")
             if response_audio_url:
                 # 如果有音訊 URL，則先傳送一段引導文字，再傳送音訊
-                # line_service.push_text_message(user_id=patient_id, text=ai_response)
+                line_service.push_text_message(user_id=patient_id, text=ai_response)
 
                 # 直接從訊息中獲取由 ai-worker 計算好的音訊時長
                 duration_ms = message.get("audio_duration_ms", 60000) # 若無提供，預設為 60 秒

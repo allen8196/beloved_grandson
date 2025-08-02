@@ -1,8 +1,9 @@
 import os
 import uuid
 from minio import Minio
-from minio.error import S3Error
 import io
+from minio.error import S3Error
+from mutagen import File
 
 class TTSService:
     def __init__(self):
@@ -32,14 +33,23 @@ class TTSService:
         This is a placeholder implementation.
         """
         try:
-            local_audio_path = "Anya_music.mp3"
+            local_audio_path = "Anya_music.m4a"
             # 檢查檔案是否存在，以避免錯誤
             if not os.path.exists(local_audio_path):
                 raise FileNotFoundError(f"指定的音檔不存在: {local_audio_path}")
             audio_data_len = os.path.getsize(local_audio_path)
 
+            metadata = {}
+            duration_ms = 0
+            try:
+                audio_file = File(local_audio_path)
+                duration_ms = int(audio_file.info.length * 1000)
+                metadata['duration-ms'] = str(duration_ms)
+            except Exception as e:
+                print(f"無法使用 mutagen 解析音訊檔案: {e}")
+
             # 產生唯一的物件名稱
-            object_name = f"{uuid.uuid4()}.mp3"
+            object_name = f"{uuid.uuid4()}.m4a"
 
             # 上傳到 MinIO
             print(f"Uploading {object_name} to bucket {self.bucket_name}...", flush=True)
@@ -49,11 +59,12 @@ class TTSService:
                     object_name,
                     audio_file,
                     length=audio_data_len,
-                    content_type='audio/mpeg'
+                    content_type='audio/mpeg',
+                    metadata=metadata
                 )
 
-            print(f"Successfully uploaded {object_name}.", flush=True)
-            return object_name
+            print(f"Successfully uploaded {object_name}, {duration_ms}.", flush=True)
+            return object_name, duration_ms
 
         except S3Error as exc:
             print(f"Error uploading to MinIO: {exc}", flush=True)

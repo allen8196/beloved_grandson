@@ -61,7 +61,8 @@ cp services/web-app/.flaskenv.example services/web-app/.flaskenv
 
 為避免腳本執行錯誤，請確保以下檔案的換行符號為 `LF` (可在 VS Code 右下角切換)：
 *   `.env`
-*   `entrypoint.sh`
+*   `services\web-app\entrypoint.sh`
+*   `infra\nginx\init-letsencrypt.sh`
 
 ---
 

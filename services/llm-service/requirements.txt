@@ -1,5 +1,0 @@
-pika
-pytest
-httpx
-pytest-mock
-google-generativeai

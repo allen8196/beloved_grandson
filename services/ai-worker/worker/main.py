@@ -3,6 +3,9 @@ import pika
 import json
 import time
 import uuid
+from llm_app.llm_service import LLMService
+from stt_app.stt_service import STTService
+from tts_app.tts_service import TTSService
 
 def publish_notification(message: dict, patient_id: int):
     """將訊息發佈到通知佇列。"""
@@ -26,114 +29,39 @@ def publish_notification(message: dict, patient_id: int):
         print(f"連線到 RabbitMQ 以發送通知時出錯: {e}", flush=True)
         raise
 
-class BaseRpcClient:
-    """RPC 客戶端的基底類別。"""
-    def __init__(self, rpc_queue_name: str):
-        self.rabbitmq_host = os.environ.get("RABBITMQ_HOST", "rabbitmq")
-        self.rpc_queue = rpc_queue_name
-        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.rabbitmq_host))
-        self.channel = self.connection.channel()
-        result = self.channel.queue_declare(queue='', exclusive=True)
-        self.callback_queue = result.method.queue
-        self.channel.basic_consume(
-            queue=self.callback_queue,
-            on_message_callback=self.on_response,
-            auto_ack=True
-        )
-        self.response = None
-        self.corr_id = None
-
-    def on_response(self, ch, method, props, body):
-        """處理回應訊息。"""
-        if self.corr_id == props.correlation_id:
-            self.response = body
-
-    def call(self, payload: dict, timeout: int = 30):
-        """發送 RPC 請求並等待回應。"""
-        self.response = None
-        self.corr_id = str(uuid.uuid4())
-
-        self.channel.basic_publish(
-            exchange='',
-            routing_key=self.rpc_queue,
-            properties=pika.BasicProperties(
-                reply_to=self.callback_queue,
-                correlation_id=self.corr_id,
-            ),
-            body=json.dumps(payload)
-        )
-        print(f" [x] 已發送 RPC 請求到 {self.rpc_queue}: {payload}", flush=True)
-
-        self.connection.process_data_events(time_limit=timeout)
-
-        if self.response is None:
-            raise TimeoutError(f"{self.rpc_queue} 服務 RPC 請求超時")
-
-        return json.loads(self.response)
-
-    def close(self):
-        if self.connection.is_open:
-            self.connection.close()
-            print(f"{self.rpc_queue} RPC 客戶端連線已關閉。", flush=True)
-
-class SttRpcClient(BaseRpcClient):
-    def __init__(self):
-        super().__init__(os.environ.get("RABBITMQ_STT_QUEUE", "stt_request_queue"))
-
-class LlmRpcClient(BaseRpcClient):
-    def __init__(self):
-        super().__init__(os.environ.get("RABBITMQ_LLM_QUEUE", "llm_request_queue"))
-
-class TtsRpcClient(BaseRpcClient):
-    def __init__(self):
-        super().__init__(os.environ.get("RABBITMQ_TTS_QUEUE", "tts_request_queue"))
-
 
 def process_text_task(text_message: str):
-    """透過 RabbitMQ RPC 呼叫 llm-service 來處理文字訊息。"""
-    llm_rpc_client = None
-    try:
-        print("建立 LLM RPC 客戶端...", flush=True)
-        llm_rpc_client = LlmRpcClient()
-        response = llm_rpc_client.call({"text": text_message})
-        print(f"成功呼叫 LLM 服務。回應: {response}", flush=True)
-        return response
-    finally:
-        if llm_rpc_client:
-            llm_rpc_client.close()
+    """透過 llm-app 來處理文字訊息。"""
+    print("建立 LLM 服務...", flush=True)
+    response = LLMService().generate_response(text_message)
+    print(f"成功呼叫 LLM 服務。回應: {response}", flush=True)
+    return response
+
 
 def process_audio_task(patient_id: int, bucket_name: str, object_name: str, audio_duration_ms=60000):
     """
     透過 STT -> LLM -> TTS 管道處理音訊檔案任務。
     """
-    stt_client, llm_client, tts_client = None, None, None
     try:
         # 步驟 1: STT - 語音轉文字
         print(f"--- 開始 STT 處理: {object_name} ---", flush=True)
-        stt_client = SttRpcClient()
-        stt_response = stt_client.call({"bucket_name": bucket_name, "object_name": object_name})
-        user_transcript = stt_response.get("transcribed_text")
+        user_transcript = STTService().transcribe_audio(bucket_name, object_name)
         if not user_transcript:
             raise ValueError("STT 服務未返回有效的轉錄文字")
         print(f"STT 結果: {user_transcript}", flush=True)
 
 
-        ai_response = 'aaaa'
         # 步驟 2: LLM - 產生 AI 回應
-        # print(f"--- 開始 LLM 處理 ---", flush=True)
-        # llm_client = LlmRpcClient()
-        # llm_response = llm_client.call({"text": user_transcript})
-        # ai_response = llm_response.get("message")
-        # if not ai_response:
-        #     raise ValueError("LLM 服務未返回有效的 AI 回應")
-        # print(f"LLM 結果: {ai_response}", flush=True)
+        print(f"--- 開始 LLM 處理 ---", flush=True)
+        ai_response = LLMService().generate_response(user_transcript)
+        if not ai_response:
+            raise ValueError("LLM 服務未返回有效的 AI 回應")
+        print(f"LLM 結果: {ai_response}", flush=True)
+
 
         # 步驟 3: TTS - 文字轉語音
         print(f"--- 開始 TTS 處理 ---", flush=True)
-        tts_client = TtsRpcClient()
-        tts_response = tts_client.call({"text": ai_response})
-        response_audio_url = tts_response.get("object_name") # TODO tts_response 回應檔案錯誤
-        print(dict(tts_response), '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+        response_audio_url, duration_ms = TTSService().synthesize_text(ai_response)
         if not response_audio_url:
             raise ValueError("TTS 服務未返回有效的音訊物件名稱")
         print(f"TTS 結果: {response_audio_url}", flush=True)
@@ -145,7 +73,7 @@ def process_audio_task(patient_id: int, bucket_name: str, object_name: str, audi
             "user_transcript": user_transcript,
             "ai_response": ai_response,
             "response_audio_url": response_audio_url,
-            "audio_duration_ms": audio_duration_ms # TODO 秒數要改
+            "audio_duration_ms": duration_ms
         }
         publish_notification(notification_message, patient_id)
 
@@ -158,15 +86,6 @@ def process_audio_task(patient_id: int, bucket_name: str, object_name: str, audi
         }
         publish_notification(error_notification, patient_id)
         raise
-    finally:
-        # 確保所有客戶端連線都被關閉
-        if stt_client:
-            stt_client.close()
-        # if llm_client:
-        #     llm_client.close()
-        if tts_client:
-            tts_client.close()
-
 
 if __name__ == '__main__':
     rabbitmq_host = os.environ.get("RABBITMQ_HOST", "rabbitmq")

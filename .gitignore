@@ -11,3 +11,12 @@ instance/
 .coverage
 data/
 Anya_music.mp3
+.md
+GEMINI.md
+pe.md
+0_discovery
+1_design
+2_implementation
+3_validation
+4_deployment
+design_templates

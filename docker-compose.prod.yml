@@ -51,6 +51,8 @@ services:
     environment:
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
     ports:
       - "15672:15672" # 只暴露管理介面給內網或特定IP
     restart: unless-stopped
@@ -142,6 +144,9 @@ services:
         condition: service_healthy
     restart: on-failure
 
+  # -------------------------------------------------
+  #  3. AI 服務層 (Production Mode)
+  # -------------------------------------------------
   ai-worker:
     build:
       context: ./services/ai-worker
@@ -164,72 +169,12 @@ services:
       - RABBITMQ_STT_QUEUE=stt_request_queue
       - RABBITMQ_TTS_QUEUE=tts_request_queue
       - PYTHONUNBUFFERED=1
+      - MINIO_BUCKET_NAME=audio-bucket
     depends_on:
       - rabbitmq
       - postgres
       - redis
       - mongodb
-      - minio
-      - llm-service
-      - stt-service
-      - tts-service
-    restart: on-failure
-
-  # -------------------------------------------------
-  #  3. AI 微服務層 (Production Mode)
-  # -------------------------------------------------
-  llm-service:
-    build:
-      context: ./services/llm-service
-      dockerfile: Dockerfile
-    container_name: prod_llm_service
-    # The command is now inherited from the Dockerfile's CMD
-    environment:
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_LLM_QUEUE=llm_request_queue
-      - PYTHONUNBUFFERED=1
-    depends_on:
-      - rabbitmq
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-        reservations:
-          memory: 2G
-    restart: on-failure
-
-  stt-service:
-    build:
-      context: ./services/stt-service
-      dockerfile: Dockerfile
-    container_name: prod_stt_service
-    environment:
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_STT_QUEUE=stt_request_queue
-      - MINIO_ENDPOINT=minio:9000
-      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
-      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
-      - PYTHONUNBUFFERED=1
-    depends_on:
-      - rabbitmq
-      - minio
-    restart: on-failure
-
-  tts-service:
-    build:
-      context: ./services/tts-service
-      dockerfile: Dockerfile
-    container_name: prod_tts_service
-    environment:
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_TTS_QUEUE=tts_request_queue
-      - MINIO_ENDPOINT=minio:9000
-      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
-      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
-      - MINIO_BUCKET_NAME=audio-bucket
-      - PYTHONUNBUFFERED=1
-    depends_on:
-      - rabbitmq
       - minio
     restart: on-failure
 
@@ -238,8 +183,8 @@ services:
   # -------------------------------------------------
   nginx:
     build:
-      context: ./infra/nginx
-      dockerfile: Dockerfile.prod
+      context: .
+      dockerfile: /infra/nginx/Dockerfile.prod
     container_name: prod_nginx_load_balancer
     ports:
       - "80:80"
@@ -263,3 +208,4 @@ volumes:
   minio:
   etcd:
   mongodb_data:
+  rabbitmq_data:
