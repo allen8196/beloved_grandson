@@ -238,8 +238,8 @@ services:
   # -------------------------------------------------
   nginx:
     build:
-      context: .
-      dockerfile: ./infra/nginx/Dockerfile
+      context: ./infra/nginx
+      dockerfile: Dockerfile.prod
     container_name: prod_nginx_load_balancer
     ports:
       - "80:80"

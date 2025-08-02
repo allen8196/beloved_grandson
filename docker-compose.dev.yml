@@ -28,8 +28,6 @@ services:
   redis:
     image: redis:7-alpine
     container_name: dev_redis_cache
-    ports:
-      - "6379:6379"
     volumes:
       - dev_redisdata:/data
     restart: unless-stopped
@@ -247,19 +245,24 @@ services:
   # -------------------------------------------------
   nginx:
     build:
-      context: .
-      dockerfile: ./infra/nginx/Dockerfile
+      context: ./infra/nginx
+      dockerfile: Dockerfile.dev
+      # context: ./infra/nginx
+      # dockerfile: Dockerfile.prod
     container_name: dev_nginx_load_balancer
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./data/certbot/conf:/etc/letsencrypt
-      - ./data/certbot/www:/var/www/certbot
+      # 掛載開發專用設定檔
+      - ./infra/nginx/config/development.conf:/etc/nginx/conf.d/default.conf
+      # - ./data/certbot/conf:/etc/letsencrypt
+      # - ./data/certbot/www:/var/www/certbot
     env_file:
       - .env
     depends_on:
       - web-app
+      - minio
     restart: unless-stopped
 
 # -------------------------------------------------

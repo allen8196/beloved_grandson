@@ -1,0 +1,8 @@
+# infra/nginx/Dockerfile.dev
+# 專為開發環境設計的極簡 Nginx 映像檔
+
+FROM nginx:1.25-alpine
+
+# 開發環境不需要安裝額外套件或複製腳本
+# 我們將直接在 docker-compose.dev.yml 中掛載設定檔
+# Nginx 官方映像檔已包含預設的啟動指令 (nginx -g 'daemon off;')

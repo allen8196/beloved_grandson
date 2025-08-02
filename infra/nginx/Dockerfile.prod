@@ -1,0 +1,37 @@
+# Use the official Nginx image on Alpine Linux as a base
+FROM nginx:1.25-alpine
+
+# Install necessary packages:
+# - openssl: For generating self-signed certificates.
+# - certbot: For obtaining and managing Let's Encrypt certificates.
+# - certbot-nginx: The Nginx plugin for Certbot.
+# - bash: A more feature-rich shell than the default sh.
+# - dcron: For running scheduled tasks (certificate renewal).
+RUN apk add --no-cache openssl certbot certbot-nginx bash dcron
+
+# Copy the certificate provisioning and renewal scripts into the image
+COPY ./infra/nginx/init-letsencrypt.sh /init-letsencrypt.sh
+COPY ./infra/nginx/renew-certs.sh /renew-certs.sh
+
+# Copy the Nginx configuration
+# We use /etc/nginx/templates/ to prepare for environment variable substitution
+COPY ./infra/nginx/default.conf /etc/nginx/templates/default.conf.template
+
+# Copy the SSL options configuration to a temporary location
+COPY ./infra/nginx/options-ssl-nginx.conf /tmp/options-ssl-nginx.conf
+
+# Make the scripts executable
+RUN chmod +x /init-letsencrypt.sh /renew-certs.sh
+
+# Set up the cron job to run the renewal script daily at 3:30 AM
+# The output is redirected to the container's log stream
+RUN echo "30 3 * * * /renew-certs.sh >> /var/log/cron.log 2>&1" > /etc/crontabs/root
+# Create log file and set permissions
+RUN touch /var/log/cron.log && chmod 0644 /var/log/cron.log
+
+# Set the entrypoint to our script
+ENTRYPOINT ["/init-letsencrypt.sh"]
+
+# The default command to run after the entrypoint script finishes.
+# This will start Nginx in the foreground.
+CMD ["nginx", "-g", "daemon off;"]
