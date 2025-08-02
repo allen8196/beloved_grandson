@@ -1,3 +1,6 @@
+import google.generativeai as genai
+import os
+
 class LLMService:
     def generate_response(self, text: str) -> str:
         """
@@ -5,10 +8,15 @@ class LLMService:
         This is a placeholder implementation.
         """
         # 實際的 LLM 呼叫邏輯會在這裡
-        return f"Echo: {text}"
+        genai.configure(api_key=os.environ.get("GOOGLE_API_KEY", ""))
+        model = genai.GenerativeModel('gemini-2.5-flash')
 
-_llm_service_instance = LLMService()
+        print(f"提示詞：{text}")
+        try:
+            response = model.generate_content(text)
 
-def get_llm_service() -> LLMService:
-    """Factory function to get the LLMService instance."""
-    return _llm_service_instance
+        except Exception as e:
+            print(f"發生錯誤：{e}")
+            return "抱歉，無法生成回應。"
+        print(f"生成回應的提示詞：{response.text}")
+        return response.text

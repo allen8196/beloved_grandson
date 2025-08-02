@@ -247,3 +247,56 @@ def get_messages(conversation_id):
     except Exception as e:
         logging.error(f"Error getting messages for conversation {conversation_id}: {e}", exc_info=True)
         return jsonify({"error": {"code": "INTERNAL_SERVER_ERROR", "message": "An unexpected error occurred."}}), 500
+
+from app.core.line_service import get_line_service
+from linebot.v3.exceptions import InvalidSignatureError
+
+@bp.route('/chat/webhook', methods=['POST'])
+def line_webhook():
+    """
+    Webhook endpoint for receiving events from the LINE Platform.
+    This is the single entry point for all user interactions from LINE.
+    ---
+    tags:
+      - chat
+      - line
+    parameters:
+      - in: header
+        name: X-Line-Signature
+        type: string
+        required: true
+        description: Signature for verifying the request origin.
+      - in: body
+        name: body
+        required: true
+        description: The request body contains the list of webhook events.
+        schema:
+          type: object
+    responses:
+      200:
+        description: Successfully processed the event(s).
+      400:
+        description: Invalid request, e.g., missing signature or bad request body.
+    """
+    
+    # Get X-Line-Signature header value
+    signature = request.headers.get('X-Line-Signature')
+    if not signature:
+        abort(400, "X-Line-Signature header is required.")
+
+    # Get request body as text
+    body = request.get_data(as_text=True)
+    
+    line_service = get_line_service()
+    try:
+        line_service.handle_webhook(body, signature)
+    except InvalidSignatureError:
+        logging.warning("Invalid signature received for LINE webhook.")
+        abort(400, "Invalid signature.")
+    except Exception as e:
+        logging.error(f"Error processing LINE webhook: {e}", exc_info=True)
+        # Return OK to LINE platform even if internal error occurs
+        # to prevent retries for a message that is already causing an error.
+        return 'OK'
+
+    return 'OK'

@@ -185,6 +185,20 @@ def handle_line_register():
         error_code = "USER_ALREADY_EXISTS" if status_code == 409 else "INVALID_INPUT"
         return jsonify({"error": {"code": error_code, "message": error_msg}}), status_code
 
+    # Link member rich menu upon successful registration
+    try:
+        from ..core.line_service import get_line_service
+        from flask import current_app
+        
+        line_service = get_line_service()
+        member_menu_id = current_app.config.get('LINE_RICH_MENU_ID_MEMBER')
+        if member_menu_id:
+            line_service.link_rich_menu_to_user(new_user.line_user_id, member_menu_id)
+            logging.info(f"Successfully linked member rich menu to new user {new_user.id}")
+    except Exception as e:
+        logging.error(f"Failed to link rich menu for new user {new_user.id}: {e}", exc_info=True)
+        # We don't fail the request for this, just log it.
+
     identity = str(new_user.id)
     expires = timedelta(days=7)
     access_token = create_access_token(identity=identity, expires_delta=expires)
@@ -203,3 +217,25 @@ def handle_line_register():
             "user": user_info
         }
     }), 201
+
+@auth_bp.route('/liff', methods=['GET'])
+@swag_from({
+    'summary': '提供 LIFF 頁面',
+    'description': '提供 LINE Front-end Framework (LIFF) 的主要 HTML 頁面。',
+    'tags': ['LIFF'],
+    'responses': {
+        '200': {
+            'description': '成功回傳 LIFF HTML 頁面',
+            'content': {
+                'text/html': {}
+            }
+        }
+    }
+})
+def serve_liff_page():
+    """提供 LIFF 靜態頁面"""
+    from flask import current_app, send_from_directory
+    # The static folder should be configured at the app level
+    # e.g., app = Flask(__name__, static_folder='../static')
+    # Here we assume the static folder is 'static' at the app's root
+    return send_from_directory(current_app.static_folder, 'liff.html')

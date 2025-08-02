@@ -3,3 +3,5 @@ uvicorn
 pytest
 pytest-mock
 httpx
+pika
+minio

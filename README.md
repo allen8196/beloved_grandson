@@ -161,22 +161,70 @@ docker-compose -f docker-compose.dev.yml exec web-app pytest --cov=app --cov-rep
 
 ---
 
-## 5. 生產環境部署
+## 5. 生產環境部署 (全自動 HTTPS)
 
-生產環境使用 `Nginx` 作為反向代理，並以更安全、高效的方式運行。
+生產環境使用 `Nginx` 作為反向代理，並透過一個智慧型啟動腳本與 `Certbot` 深度整合，實現 SSL 憑證申請與續期的全自動化。您無需手動執行任何 `certbot` 指令或在主機上設定 `cron job`。
 
-*   **啟動指令**:
-    ```bash
-    docker-compose -f docker-compose.prod.yml up -d --build
-    ```
-*   **停止指令**:
-    ```bash
-    docker-compose -f docker-compose.prod.yml down -v
-    ```
-*   **主要差異**:
-    *   所有請求都應透過 Nginx (預設 `80` 埠)。
-    *   原始碼不會掛載到容器中，每次程式碼更新都需要重新建置映像檔。
-    *   資料會儲存在具名的 Docker Volume 中，更加持久與安全。
+### 前置作業
+
+1.  **網域名稱**: 您必須擁有一個或多個網域名稱 (例如 `your-domain.com`, `www.your-domain.com`)。
+2.  **公開 IP**: 您需要一台具有公開 IP 位址的伺服器。
+3.  **DNS 設定**: 請在您的網域服務商後台，為您所有要使用的網域名稱新增 `A` 紀錄，將它們指向伺服器的公開 IP。
+4.  **防火牆**: 請確保您的伺服器防火牆已開啟 `80` (HTTP) 和 `443` (HTTPS) 連接埠。
+
+### 部署步驟
+
+#### 步驟 1: 設定 `.env` 環境變數
+
+複製範例檔案，並填寫所有必要的資訊。
+
+```bash
+cp .env.example .env
+```
+
+接著，使用編輯器打開 `.env` 檔案，**務必填寫**以下變數：
+*   `CERTBOT_DOMAINS`: **(必填)** 您的網域名稱，如果有多個，請用空格隔開。**第一個域名會被視為主域名**。例如：`CERTBOT_DOMAINS=teabe.idv.tw www.teabe.idv.tw`
+*   `CERTBOT_EMAIL`: **(必填)** 您用於接收 Let's Encrypt 重要通知信的電子郵件。
+*   `CERTBOT_STAGING`: **(選填)** 設為 `1` 使用 Let's Encrypt 的測試環境，設為 `0` 使用生產環境。**預設為 `1` (測試)**。建議首次部署或進行除錯時使用測試環境。
+
+同時，也請務必修改檔案中所有預設的資料庫密碼，以策安全。
+
+#### 步驟 2: 一鍵啟動！
+
+完成 `.env` 設定後，執行以下單一指令即可建置、申請憑證並啟動所有服務。
+
+```bash
+docker-compose -f docker-compose.prod.yml up --build -d
+```
+
+腳本會自動處理所有事情：
+*   如果沒有憑證，它會先用一個**自簽名憑證**啟動 Nginx。
+*   然後在背景向 Let's Encrypt **申請真實憑證**。
+*   成功取得後，會**自動重啟 Nginx** 以載入新憑證。
+*   容器內部已包含一個**每日執行的排程任務**，會自動為您續期憑證。
+
+現在，您可以透過 `https://<您的主域名>` 來存取您的應用程式了。
+
+### 疑難排解與維護
+
+#### Let's Encrypt 速率限制
+
+在反覆測試的過程中，您可能會遇到 Let's Encrypt 的[速率限制](https://letsencrypt.org/docs/rate-limits/) (每週只能為同一個域名申請 5 次憑證)。
+
+*   **症狀**: Nginx 容器不斷重啟，日誌中出現 `too many certificates already issued` 的錯誤。
+*   **解決方法**:
+    1.  編輯 `.env` 檔案，設定 `CERTBOT_STAGING=1` 來切換到測試環境。
+    2.  執行 `docker-compose -f docker-compose.prod.yml down` 停止服務。
+    3.  **(重要)** 執行 `rmdir /s /q data\certbot` (Windows) 或 `rm -rf data/certbot` (Linux/macOS) 來清除舊的憑證資料。
+    4.  重新執行 `docker-compose -f docker-compose.prod.yml up --build -d`。服務將會用測試憑證啟動。
+    5.  等待一週，讓速率限制解除後，再切換回 `CERTBOT_STAGING=0` 並重複清理步驟。
+
+#### 停止生產環境
+
+```bash
+docker-compose -f docker-compose.prod.yml down -v
+```
+加上 `-v` 會一併刪除所有資料庫的 volume，請謹慎使用。
 
 ---
 
@@ -193,3 +241,21 @@ docker-compose -f docker-compose.dev.yml exec web-app pytest --cov=app --cov-rep
 | **LLM Service** | `8001` | `http://localhost:8001` | (若需單獨測試) |
 | **STT Service** | `8002` | `http://localhost:8002` | (若需單獨測試) |
 | **TTS Service** | `8003` | `http://localhost:8003` | (若需單獨測試) |
+
+## 使用ubuntu WSL中執行docker指令會有
+
+```sh
+chmod +x services/web-app/entrypoint.sh
+```
+
+圖文選單，進入容器裡執行以下指令
+
+```py
+python create_rich_menus.py
+```
+
+Endpoint URL
+`https://xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.ngrok-free.app/api/v1/auth/liff`
+
+Webhook URL
+`https://xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.ngrok-free.app/api/v1/chat/webhook`

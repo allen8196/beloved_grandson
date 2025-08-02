@@ -37,9 +37,10 @@ users_bp = Blueprint('users', __name__, url_prefix='/api/v1/users')
     ],
     'responses': {
         '201': {'description': '使用者建立成功'},
-        '400': {'description': '請求無效或使用者已存在'},
+        '400': {'description': '請求無效或缺少必要欄位'},
         '401': {'description': '未提供 Token 或 Token 無效'},
-        '403': {'description': '沒有管理員權限'}
+        '403': {'description': '沒有管理員權限'},
+        '409': {'description': '使用者帳號已存在'}
     }
 })
 def handle_create_user():

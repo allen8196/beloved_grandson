@@ -17,5 +17,7 @@ EXPOSE 5000
 
 ENTRYPOINT ["/usr/src/app/entrypoint.sh"]
 
-# CMD 會在容器啟動時執行
-CMD ["sh", "-c", "if [ \"$FLASK_ENV\" = \"development\" ]; then flask run --host=0.0.0.0 --port=5000 --debug; else gunicorn --bind 0.0.0.0:5000 wsgi:app; fi"]
+# CMD 提供容器的預設啟動命令。
+# 這個命令會被 docker-compose.yml 中的 'command' 指令覆蓋。
+# 我們將其設定為生產環境的啟動命令作為一個合理的預設值。
+CMD ["gunicorn", "--worker-class", "gevent", "--workers", "1", "--bind", "0.0.0.0:5000", "wsgi:app"]

@@ -38,6 +38,13 @@ class Config:
     MINIO_SECRET_KEY = os.getenv('MINIO_SECRET_KEY')
     MINIO_SECURE = os.getenv('MINIO_SECURE', 'False').lower() in ['true', '1', 't']
 
+    # LINE Bot 設定
+    LINE_CHANNEL_SECRET = os.getenv('LINE_CHANNEL_SECRET')
+    LINE_CHANNEL_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
+    LINE_RICH_MENU_ID_GUEST = os.getenv('LINE_RICH_MENU_ID_GUEST')
+    LINE_RICH_MENU_ID_MEMBER = os.getenv('LINE_RICH_MENU_ID_MEMBER')
+
+    BASE_URL = os.getenv('BASE_URL')
 
 class DevelopmentConfig(Config):
     """開發環境設定"""

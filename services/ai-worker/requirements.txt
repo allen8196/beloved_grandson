@@ -4,3 +4,4 @@ requests
 boto3
 pika
 pymongo==4.8.0
+mutagen==1.47.0

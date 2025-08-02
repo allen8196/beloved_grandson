@@ -56,7 +56,7 @@ class ChatRepository:
 
         Args:
             message_data: A dictionary containing the message details.
-                          Expected keys: 'conversation_id', 'sender_type', 
+                          Expected keys: 'conversation_id', 'sender_type',
                                          'content', 'audio_url' (optional).
 
         Returns:
@@ -133,7 +133,7 @@ class ChatRepository:
             conv_id = ObjectId(conversation_id)
         except Exception:
             return None # Invalid ObjectId format
-        
+
         try:
             return self.conversations_collection.find_one({"_id": conv_id})
         except PyMongoError as e:

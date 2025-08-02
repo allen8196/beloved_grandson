@@ -1,5 +1,5 @@
-fastapi
-uvicorn
+pika
 pytest
 httpx
 pytest-mock
+google-generativeai

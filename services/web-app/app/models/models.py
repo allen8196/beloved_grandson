@@ -26,6 +26,9 @@ class User(db.Model):
     mmrc_questionnaires = db.relationship('QuestionnaireMMRC', backref='user', lazy='dynamic', cascade="all, delete-orphan")
     cat_questionnaires = db.relationship('QuestionnaireCAT', backref='user', lazy='dynamic', cascade="all, delete-orphan")
 
+    # Relationship for staff managing health profiles
+    managed_profiles = db.relationship('HealthProfile', foreign_keys='HealthProfile.staff_id', back_populates='managing_staff', lazy='dynamic')
+
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
@@ -49,25 +52,25 @@ class User(db.Model):
 class HealthProfile(db.Model):
     __tablename__ = 'health_profiles'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, unique=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, unique=True)
     height_cm = db.Column(db.Integer)
     weight_kg = db.Column(db.Integer)
     smoke_status = db.Column(db.String(10)) # e.g., 'never', 'quit', 'current'
-    staff_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    staff_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
-    managing_staff = db.relationship('User', foreign_keys=[staff_id], backref='managed_profiles')
+    managing_staff = db.relationship('User', foreign_keys=[staff_id], back_populates='managed_profiles')
 
 class StaffDetail(db.Model):
     __tablename__ = 'staff_details'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, unique=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, unique=True)
     title = db.Column(db.String(100)) # e.g., '呼吸治療師'
 
 class DailyMetric(db.Model):
     __tablename__ = 'daily_metrics'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     water_cc = db.Column(db.Integer)
     medication = db.Column(db.Boolean)
     exercise_min = db.Column(db.Integer)
@@ -78,7 +81,7 @@ class DailyMetric(db.Model):
 class QuestionnaireMMRC(db.Model):
     __tablename__ = 'questionnaire_mmrc'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     score = db.Column(db.SmallInteger, nullable=False)
     answer_text = db.Column(db.Text)
     record_date = db.Column(db.Date, nullable=False)
@@ -87,7 +90,7 @@ class QuestionnaireMMRC(db.Model):
 class QuestionnaireCAT(db.Model):
     __tablename__ = 'questionnaire_cat'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     cough_score = db.Column(db.SmallInteger, nullable=False)
     phlegm_score = db.Column(db.SmallInteger, nullable=False)
     chest_score = db.Column(db.SmallInteger, nullable=False)

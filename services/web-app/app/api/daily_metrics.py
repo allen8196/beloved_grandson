@@ -16,13 +16,13 @@ def check_permission(current_user_id, target_patient_id):
 
     user_repo = UserRepository()
     current_user = user_repo.find_by_id(current_user_id)
-    
+
     # Therapists can access their assigned patients
     if current_user and current_user.is_staff:
         target_patient = user_repo.find_by_id(target_patient_id)
         if target_patient and target_patient.therapist_id == current_user.id:
             return True
-            
+
     return False
 
 @daily_metrics_bp.route('/<int:patient_id>/daily_metrics', methods=['GET'])

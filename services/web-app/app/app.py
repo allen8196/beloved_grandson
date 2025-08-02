@@ -10,6 +10,7 @@ from .api.uploads import uploads_bp
 from .api.users import users_bp
 from .api.daily_metrics import daily_metrics_bp
 from .api.chat import bp as chat_bp # Explicitly import and alias the blueprint
+from .core.notification_service import start_notification_listener
 
 def create_app(config_name='default'):
     """
@@ -61,5 +62,10 @@ def create_app(config_name='default'):
     @socketio.on('disconnect')
     def handle_disconnect():
         print('Client disconnected')
+
+    # Start the background notification listener
+    # We do this check to prevent the listener from starting during tests
+    if config_name != 'testing':
+        start_notification_listener(app)
 
     return app, socketio

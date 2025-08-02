@@ -19,7 +19,7 @@ config_name = os.getenv('FLASK_CONFIG', 'development')
 app, socketio = create_app(config_name)
 
 if __name__ == '__main__':
-    # 啟動背景的 RabbitMQ 監聽器
-    start_notification_listener()
+    # 啟動背景的 RabbitMQ 監聽器，並傳入 app 實例
+    start_notification_listener(app)
     # 使用 socketio.run 來啟動伺服器，這樣才能支援 WebSocket
     socketio.run(app, host='0.0.0.0', port=5000)

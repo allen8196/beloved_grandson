@@ -1,7 +1,6 @@
 # docker-compose.dev.yml
 # 說明：專為本地開發設計，支援程式碼熱重載 (Hot-Reloading)。
 # 執行：docker-compose -f docker-compose.dev.yml up --build -d
-version: '3.8'
 
 services:
   # -------------------------------------------------
@@ -130,8 +129,8 @@ services:
     volumes:
       # 掛載本地程式碼到容器中，實現熱重載
       - ./services/web-app:/usr/src/app
+    command: flask run --host=0.0.0.0 --port=5000 --debug
     environment:
-      - FLASK_ENV=development # 啟用 Flask 開發模式
       - DATABASE_URL=postgresql://${POSTGRES_ADMIN_USER}:${POSTGRES_ADMIN_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - REDIS_URL=redis://redis:6379
       - MONGO_URL=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/
@@ -146,7 +145,6 @@ services:
         condition: service_healthy
       mongodb:
         condition: service_healthy
-    command: python wsgi.py
 
   ai-worker:
     build:
@@ -163,21 +161,22 @@ services:
       - REDIS_URL=redis://redis:6379
       - MONGO_URL=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
-      - LLM_SERVICE_URL=http://llm-service:8000
-      - STT_SERVICE_URL=http://stt-service:8000
-      - TTS_SERVICE_URL=http://tts-service:8000
-      - MINIO_ENDPOINT_URL=http://minio:9000
+      - MINIO_ENDPOINT=minio:9000
       - MINIO_ACCESS_KEY=minioadmin
       - MINIO_SECRET_KEY=minioadmin
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_QUEUE=task_queue
       - RABBITMQ_NOTIFICATION_QUEUE=notifications_queue
+      - RABBITMQ_LLM_QUEUE=llm_request_queue
+      - RABBITMQ_STT_QUEUE=stt_request_queue
+      - RABBITMQ_TTS_QUEUE=tts_request_queue
       - PYTHONUNBUFFERED=1
     depends_on:
       - rabbitmq
       - postgres
       - redis
       - mongodb
+      - minio
       - llm-service
       - stt-service
       - tts-service
@@ -191,20 +190,16 @@ services:
       dockerfile: Dockerfile
     container_name: dev_llm_service
     volumes:
-      # 掛載本地程式碼，方便開發與測試
+      # 掛載本地程式碼，若有修改可重啟容器生效
       - ./services/llm-service:/app
-    command: |
-      sh -c "
-        pip install --no-cache-dir -r requirements.txt &&
-        PYTHONPATH=/app uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-      "
+    # The command is now inherited from the Dockerfile's CMD
     environment:
-      - MILVUS_HOST=milvus
-      - MILVUS_PORT=19530
-    ports:
-      - "8001:8000"
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_LLM_QUEUE=llm_request_queue
+      - PYTHONUNBUFFERED=1
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
     depends_on:
-      - milvus
+      - rabbitmq
 
   stt-service:
     build:
@@ -212,11 +207,18 @@ services:
       dockerfile: Dockerfile
     container_name: dev_stt_service
     volumes:
+      # 掛載本地程式碼，若有修改可重啟容器生效
       - ./services/stt-service:/app
-    command: >
-      sh -c "pip install --no-cache-dir -r requirements.txt && PYTHONPATH=/app uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
-    ports:
-      - "8002:8000"
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_STT_QUEUE=stt_request_queue
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - rabbitmq
+      - minio
     restart: on-failure
 
   tts-service:
@@ -225,15 +227,43 @@ services:
       dockerfile: Dockerfile
     container_name: dev_tts_service
     volumes:
+      # 掛載本地程式碼，若有修改可重啟容器生效
       - ./services/tts-service:/app
-    command: >
-      sh -c "pip install --no-cache-dir -r requirements.txt && PYTHONPATH=/app uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
-    ports:
-      - "8003:8000"
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_TTS_QUEUE=tts_request_queue
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_BUCKET_NAME=audio-bucket
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - rabbitmq
+      - minio
     restart: on-failure
 
+  # -------------------------------------------------
+  #  4. 邊緣網路層 (Edge Layer)
+  # -------------------------------------------------
+  nginx:
+    build:
+      context: .
+      dockerfile: ./infra/nginx/Dockerfile
+    container_name: dev_nginx_load_balancer
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./data/certbot/conf:/etc/letsencrypt
+      - ./data/certbot/www:/var/www/certbot
+    env_file:
+      - .env
+    depends_on:
+      - web-app
+    restart: unless-stopped
+
 # -------------------------------------------------
-#  4. 具名磁碟區 (開發環境)
+#  5. 具名磁碟區 (開發環境)
 # -------------------------------------------------
 volumes:
   dev_pgdata:
