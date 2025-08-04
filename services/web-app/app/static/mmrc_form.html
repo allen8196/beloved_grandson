@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>mMRC呼吸困難量表</title>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <style>
+      body {
+        font-family: Arial, "微軟正黑體", sans-serif;
+        margin: 0;
+        padding: 20px;
+        background-color: #f5f5f5;
+        color: #333;
+        font-size: 20px;
+        line-height: 1.5;
+        transition: background-color 0.3s, color 0.3s;
+      }
+
+      .container {
+        max-width: 100%;
+        margin: 0 auto;
+        padding: 15px;
+        background-color: #fff;
+        border-radius: 15px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        transition: background-color 0.3s, border 0.3s;
+      }
+
+      h2 {
+        font-size: 28px;
+        color: #28a745;
+        text-align: center;
+        margin-bottom: 25px;
+        font-weight: bold;
+        padding: 10px 0;
+        border-bottom: 2px solid #eaeaea;
+        transition: color 0.3s, border-bottom-color 0.3s;
+      }
+
+      .instruction {
+        background-color: #e7f3ff;
+        padding: 15px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        font-size: 18px;
+        border-left: 4px solid #28a745;
+        transition: background-color 0.3s;
+      }
+
+      #options {
+        list-style-type: none;
+        padding: 0;
+        margin: 0;
+      }
+
+      #options li {
+        margin-bottom: 15px;
+      }
+
+      button {
+        width: 100%;
+        padding: 20px 15px;
+        font-size: 22px;
+        border: none;
+        border-radius: 10px;
+        background-color: #f0f7ff;
+        color: #333;
+        text-align: left;
+        cursor: pointer;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: flex-start;
+        line-height: 1.4;
+      }
+
+      button:hover,
+      button:focus {
+        background-color: #d4e6ff;
+        transform: translateY(-2px);
+      }
+
+      button:active {
+        transform: translateY(0);
+      }
+
+      .score {
+        font-size: 32px;
+        font-weight: bold;
+        margin-right: 15px;
+        color: #28a745;
+        min-width: 50px;
+        text-align: center;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #e8f5e8;
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        flex-shrink: 0;
+      }
+
+      .description {
+        flex: 1;
+        padding-left: 10px;
+      }
+
+      .helper-text {
+        text-align: center;
+        margin-top: 20px;
+        font-size: 18px;
+        color: #666;
+        transition: color 0.3s;
+      }
+
+      .contrast-toggle {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: #ddd;
+        border: none;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        font-size: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: background-color 0.3s;
+      }
+
+      body.high-contrast {
+        background-color: #000;
+        color: #fff;
+      }
+
+      body.high-contrast .container {
+        background-color: #000;
+        border: 2px solid #fff;
+      }
+
+      body.high-contrast h2 {
+        color: #ffff00;
+        border-bottom-color: #fff;
+      }
+
+      body.high-contrast .instruction {
+        background-color: #333;
+        color: #fff;
+        border-left-color: #ffff00;
+      }
+
+      body.high-contrast button {
+        background-color: #000;
+        color: #fff;
+        border: 2px solid #fff;
+      }
+
+      body.high-contrast .score {
+        background-color: #333;
+        color: #ffff00;
+      }
+
+      body.high-contrast .helper-text {
+        color: #fff;
+      }
+
+      body.high-contrast button:hover,
+      body.high-contrast button:focus {
+        background-color: #333;
+      }
+
+      #loading-text {
+        display: none;
+        color: #28a745;
+        text-align: center;
+        font-size: 20px;
+        margin-top: 10px;
+        transition: color 0.3s;
+      }
+
+      body.high-contrast #loading-text {
+        color: #ffff00;
+      }
+
+      @media screen and (max-width: 480px) {
+        body {
+          font-size: 24px;
+        }
+
+        button {
+          font-size: 26px;
+        }
+
+        .score {
+          font-size: 28px;
+          width: 45px;
+          height: 45px;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <button
+      class="contrast-toggle"
+      onclick="toggleContrast()"
+      aria-label="切換高對比度模式"
+    >
+      👁️
+    </button>
+    <div class="container" role="main">
+      <h2 id="questionText">mMRC呼吸困難量表</h2>
+      <div class="instruction">請選擇最符合您目前呼吸困難程度的選項：</div>
+      <ul id="options" role="list"></ul>
+      <p id="loading-text">正在提交中，請稍候...</p>
+      <p class="helper-text">請點選最符合您情況的選項</p>
+    </div>
+    <script>
+      const mmrcOptions = [
+        {
+          score: 0,
+          description: "除非劇烈運動，否則不會感到呼吸困難",
+        },
+        {
+          score: 1,
+          description: "快步行走或走小坡時會感到呼吸困難",
+        },
+        {
+          score: 2,
+          description:
+            "由於呼吸困難，在平地行走時比同年齡的人慢，或者以自己的步調在平地行走時需要停下來呼吸",
+        },
+        {
+          score: 3,
+          description:
+            "在平地行走約100公尺或幾分鐘後，因呼吸困難而需要停下來呼吸",
+        },
+        {
+          score: 4,
+          description:
+            "因嚴重呼吸困難而無法離開家，或在穿脫衣服時會感到呼吸困難",
+        },
+      ];
+
+      let userId = "unknown_user";
+      const LIFF_ID = "你的LIFF_ID"; // 請替換為實際的 LIFF ID
+      const API_URL = "/api/questionnaires"; // 提交 mMRC 問卷的API
+
+      async function main() {
+        try {
+          await liff.init({ liffId: LIFF_ID });
+          if (!liff.isLoggedIn()) {
+            liff.login();
+            return;
+          }
+
+          const context = liff.getContext();
+          if (context && context.userId) {
+            userId = btoa(context.userId);
+          }
+
+          renderQuestion();
+          checkSavedContrast();
+        } catch (err) {
+          console.error("LIFF 初始化失敗:", err);
+          alert("LIFF 初始化失敗，請重新整理頁面");
+          // 繼續渲染問題，即使LIFF失敗也能使用
+          renderQuestion();
+          checkSavedContrast();
+        }
+      }
+
+      function renderQuestion() {
+        const list = document.getElementById("options");
+        list.innerHTML = "";
+
+        mmrcOptions.forEach((option, index) => {
+          const li = document.createElement("li");
+          li.setAttribute("role", "listitem");
+
+          const button = document.createElement("button");
+          button.onclick = () => submitScore(option.score);
+          button.tabIndex = 0;
+          button.setAttribute(
+            "aria-label",
+            `等級${option.score}：${option.description}`
+          );
+
+          const scoreElement = document.createElement("div");
+          scoreElement.className = "score";
+          scoreElement.textContent = option.score;
+
+          const descriptionElement = document.createElement("div");
+          descriptionElement.className = "description";
+          descriptionElement.textContent = option.description;
+
+          button.appendChild(scoreElement);
+          button.appendChild(descriptionElement);
+
+          li.appendChild(button);
+          list.appendChild(li);
+        });
+
+        // 讀出問題
+        speak("請選擇最符合您目前呼吸困難程度的選項");
+      }
+
+      function speak(text) {
+        if (!("speechSynthesis" in window)) return;
+
+        const synth = window.speechSynthesis;
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.lang = "zh-TW"; // 使用台灣中文
+
+        // 取消任何正在進行的語音
+        synth.cancel();
+
+        // 獲取所有可用的語音
+        const voices = synth.getVoices();
+
+        // 尋找中文語音
+        const chineseVoice = voices.find(
+          (voice) => voice.lang.includes("zh-TW") || voice.lang.includes("cmn")
+        );
+
+        if (chineseVoice) {
+          utter.voice = chineseVoice;
+        }
+
+        // 播放語音
+        synth.speak(utter);
+      }
+
+      async function submitScore(mmrcScore) {
+        showLoading(true);
+
+        try {
+          const payload = {
+            questionnaire_type: "mMRC",
+            userId: userId,
+            answers: {
+              mmrc_score: mmrcScore,
+            },
+            timestamp: new Date().toISOString(),
+          };
+
+          const response = await fetch(API_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+          if (response.ok) {
+            if (typeof liff !== "undefined" && liff.isInClient()) {
+              liff.closeWindow();
+            } else {
+              window.location.href = "thankyou.html";
+            }
+          } else {
+            throw new Error("提交失敗");
+          }
+        } catch (error) {
+          console.error("提交失敗:", error);
+          alert("提交失敗，請稍後再試");
+          showLoading(false);
+        }
+      }
+
+      function showLoading(show) {
+        document.getElementById("loading-text").style.display = show
+          ? "block"
+          : "none";
+      }
+
+      function toggleContrast() {
+        document.body.classList.toggle("high-contrast");
+        const isHighContrast =
+          document.body.classList.contains("high-contrast");
+        localStorage.setItem("highContrast", isHighContrast);
+      }
+
+      function checkSavedContrast() {
+        const isHighContrast = localStorage.getItem("highContrast") === "true";
+        if (isHighContrast) {
+          document.body.classList.add("high-contrast");
+        }
+      }
+
+      // 確保語音引擎已加載
+      function loadVoices() {
+        return new Promise((resolve) => {
+          const synth = window.speechSynthesis;
+          let voices = synth.getVoices();
+
+          if (voices.length > 0) {
+            resolve(voices);
+            return;
+          }
+
+          // 如果語音尚未加載，等待voiceschanged事件
+          synth.onvoiceschanged = () => {
+            voices = synth.getVoices();
+            resolve(voices);
+          };
+        });
+      }
+
+      // 頁面載入時初始化
+      document.addEventListener("DOMContentLoaded", async () => {
+        // 先加載語音引擎
+        await loadVoices();
+        main();
+      });
+    </script>
+  </body>
+</html>
