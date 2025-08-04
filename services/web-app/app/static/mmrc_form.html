@@ -250,8 +250,10 @@
       ];
 
       let userId = "unknown_user";
+      let patientId = null;
+      let accessToken = null;
+      let authenticationFailed = false;
       const LIFF_ID = "你的LIFF_ID"; // 請替換為實際的 LIFF ID
-      const API_URL = "/api/questionnaires"; // 提交 mMRC 問卷的API
 
       async function main() {
         try {
@@ -263,17 +265,61 @@
 
           const context = liff.getContext();
           if (context && context.userId) {
-            userId = btoa(context.userId);
+            userId = context.userId;
+            // 獲取 LIFF access token
+            accessToken = liff.getAccessToken();
+
+            // 嘗試獲取 patient_id 和認證
+            try {
+              await authenticateAndGetPatientId();
+            } catch (authError) {
+              console.error("認證失敗:", authError);
+              authenticationFailed = true;
+              alert(
+                "認證失敗，問卷數據將無法儲存到您的帳戶中，但您仍可繼續填寫問卷。"
+              );
+            }
+          } else {
+            authenticationFailed = true;
+            alert(
+              "無法獲取用戶資訊，問卷數據將無法儲存，但您仍可繼續填寫問卷。"
+            );
           }
 
           renderQuestion();
           checkSavedContrast();
         } catch (err) {
           console.error("LIFF 初始化失敗:", err);
-          alert("LIFF 初始化失敗，請重新整理頁面");
+          authenticationFailed = true;
+          alert("LIFF 初始化失敗，問卷數據將無法儲存，但您仍可繼續填寫問卷。");
           // 繼續渲染問題，即使LIFF失敗也能使用
           renderQuestion();
           checkSavedContrast();
+        }
+      }
+
+      // 新增：認證並獲取 patient_id 的函數
+      async function authenticateAndGetPatientId() {
+        try {
+          const response = await fetch("/api/auth/line/login", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ lineUserId: userId }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            patientId = data.user.id;
+            accessToken = data.access_token; // 使用後端返回的 JWT token
+            console.log("認證成功，Patient ID:", patientId);
+          } else {
+            throw new Error(`認證請求失敗: ${response.status}`);
+          }
+        } catch (error) {
+          console.error("認證過程發生錯誤:", error);
+          throw error;
         }
       }
 
@@ -341,35 +387,61 @@
       async function submitScore(mmrcScore) {
         showLoading(true);
 
+        if (authenticationFailed || !patientId || !accessToken) {
+          alert(
+            "由於認證失敗，mMRC問卷數據無法儲存到您的帳戶，但將繼續完成流程。"
+          );
+          showLoading(false);
+          if (typeof liff !== "undefined" && liff.isInClient()) {
+            liff.closeWindow();
+          } else {
+            window.location.href = "thankyou.html";
+          }
+          return;
+        }
+
         try {
           const payload = {
-            questionnaire_type: "mMRC",
-            userId: userId,
-            answers: {
-              mmrc_score: mmrcScore,
-            },
-            timestamp: new Date().toISOString(),
+            record_date: new Date().toISOString().split("T")[0], // YYYY-MM-DD 格式
+            score: mmrcScore,
+            answer_text: mmrcOptions[mmrcScore].description, // 獲取對應的文字描述
           };
 
-          const response = await fetch(API_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-
-          if (response.ok) {
-            if (typeof liff !== "undefined" && liff.isInClient()) {
-              liff.closeWindow();
-            } else {
-              window.location.href = "thankyou.html";
+          const response = await fetch(
+            `/api/v1/patients/${patientId}/questionnaires/mmrc`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${accessToken}`,
+              },
+              body: JSON.stringify(payload),
             }
-          } else {
-            throw new Error("提交失敗");
+          );
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(
+              `提交失敗: ${response.status} - ${
+                errorData.error?.message || "Unknown error"
+              }`
+            );
           }
+
+          const result = await response.json();
+          console.log("mMRC 問卷提交成功:", result);
+          alert("mMRC問卷提交成功！");
         } catch (error) {
-          console.error("提交失敗:", error);
-          alert("提交失敗，請稍後再試");
-          showLoading(false);
+          console.error("mMRC提交失敗:", error);
+          alert(`mMRC問卷提交失敗: ${error.message}，但將繼續完成流程`);
+        }
+
+        // 無論提交成功或失敗，都繼續進行流程
+        showLoading(false);
+        if (typeof liff !== "undefined" && liff.isInClient()) {
+          liff.closeWindow();
+        } else {
+          window.location.href = "thankyou.html";
         }
       }
 
