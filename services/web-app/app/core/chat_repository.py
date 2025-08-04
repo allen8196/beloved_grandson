@@ -8,7 +8,7 @@ from pymongo.errors import PyMongoError
 
 def _serialize_document(doc: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Serializes a MongoDB document by converting ObjectId to string.
+    將 MongoDB 文件序列化，把 ObjectId 轉換成字串。
     """
     if "_id" in doc:
         doc["_id"] = str(doc["_id"])
@@ -18,7 +18,7 @@ def _serialize_document(doc: Dict[str, Any]) -> Dict[str, Any]:
 
 class ChatRepository:
     """
-    Repository for handling chat history data in MongoDB.
+    處理 MongoDB 中聊天歷史資料的儲存庫 (Repository)。
     """
     def __init__(self):
         self.db = get_db()
@@ -27,14 +27,14 @@ class ChatRepository:
 
     def create_conversation(self, patient_id: int, therapist_id: Optional[int] = None) -> Optional[ObjectId]:
         """
-        Creates a new conversation session in the database.
+        在資料庫中建立一個新的對話紀錄。
 
-        Args:
-            patient_id: The ID of the patient.
-            therapist_id: The ID of the therapist (optional).
+        參數 (Args):
+            patient_id: 病患的 ID。
+            therapist_id: 治療師的 ID (選填)。
 
-        Returns:
-            The ObjectId of the newly created conversation, or None on error.
+        回傳 (Returns):
+            新建立對話的 ObjectId，若發生錯誤則回傳 None。
         """
         try:
             now = datetime.now(timezone.utc)
@@ -47,20 +47,20 @@ class ChatRepository:
             result = self.conversations_collection.insert_one(conversation_document)
             return result.inserted_id
         except PyMongoError as e:
-            logging.error(f"MongoDB error creating conversation for patient {patient_id}: {e}")
+            logging.error(f"為病患 {patient_id} 建立對話時發生 MongoDB 錯誤：{e}")
             return None
 
     def add_chat_message(self, message_data: Dict[str, Any]) -> Optional[ObjectId]:
         """
-        Adds a new chat message to a conversation.
+        為對話新增一則新的聊天訊息。
 
-        Args:
-            message_data: A dictionary containing the message details.
-                          Expected keys: 'conversation_id', 'sender_type',
-                                         'content', 'audio_url' (optional).
+        參數 (Args):
+            message_data: 包含訊息細節的字典。
+                          預期包含的鍵 (keys) 為：'conversation_id'、'sender_type'、
+                          'content'、'audio_url' (選填)。
 
-        Returns:
-            The ObjectId of the newly created message, or None on error.
+        回傳 (Returns):
+            新建立訊息的 ObjectId，若發生錯誤則回傳 None。
         """
         try:
             message_document = {
@@ -73,18 +73,18 @@ class ChatRepository:
             result = self.messages_collection.insert_one(message_document)
             return result.inserted_id
         except PyMongoError as e:
-            logging.error(f"MongoDB error adding chat message: {e}")
+            logging.error(f"新增聊天訊息時發生 MongoDB 錯誤：{e}")
             return None
 
     def get_conversations_by_patient_id(self, patient_id: int) -> List[Dict[str, Any]]:
         """
-        Retrieves all conversations for a specific patient.
+        擷取某個特定病患的所有對話。
 
-        Args:
-            patient_id: The ID of the patient.
+        參數 (Args):
+            patient_id: 病患的 ID。
 
-        Returns:
-            A list of conversation documents, sorted by start_time descending. Returns empty list on error.
+        回傳 (Returns):
+            一個對話文件 (documents) 的列表，依據 start_time 降冪排序。若發生錯誤則回傳空列表。
         """
         try:
             conversations = self.conversations_collection.find(
@@ -92,23 +92,23 @@ class ChatRepository:
             ).sort("start_time", -1)
             return [_serialize_document(convo) for convo in conversations]
         except PyMongoError as e:
-            logging.error(f"MongoDB error getting conversations for patient {patient_id}: {e}")
+            logging.error(f"為病患 {patient_id} 取得對話時發生 MongoDB 錯誤：{e}")
             return []
 
     def get_messages_by_conversation_id(self, conversation_id: str) -> List[Dict[str, Any]]:
         """
-        Retrieves all messages for a specific conversation.
+        擷取某個特定對話的所有訊息。
 
-        Args:
-            conversation_id: The ID of the conversation.
+        參數 (Args):
+            conversation_id: 對話的 ID。
 
-        Returns:
-            A list of message documents, sorted by timestamp ascending. Returns empty list on error.
+        回傳 (Returns):
+            一個訊息文件 (documents) 的列表，依據 timestamp 升冪排序。若發生錯誤則回傳空列表。
         """
         try:
             conv_id = ObjectId(conversation_id)
         except Exception:
-            return [] # Invalid ObjectId format
+            return [] # 無效的 ObjectId 格式
 
         try:
             messages = self.messages_collection.find(
@@ -116,26 +116,26 @@ class ChatRepository:
             ).sort("timestamp", 1)
             return [_serialize_document(msg) for msg in messages]
         except PyMongoError as e:
-            logging.error(f"MongoDB error getting messages for conversation {conversation_id}: {e}")
+            logging.error(f"為對話 {conversation_id} 取得訊息時發生 MongoDB 錯誤：{e}")
             return []
 
     def find_conversation_by_id(self, conversation_id: str) -> Optional[Dict[str, Any]]:
         """
-        Finds a single conversation by its ID.
+        透過 ID 尋找單一對話。
 
-        Args:
-            conversation_id: The ID of the conversation.
+        參數 (Args):
+            conversation_id: 對話的 ID。
 
-        Returns:
-            The conversation document if found, otherwise None.
+        回傳 (Returns):
+            如果找到對話文件 (document) 則回傳該文件，否則回傳 None。
         """
         try:
             conv_id = ObjectId(conversation_id)
         except Exception:
-            return None # Invalid ObjectId format
+            return None # 無效的 ObjectId 格式
 
         try:
             return self.conversations_collection.find_one({"_id": conv_id})
         except PyMongoError as e:
-            logging.error(f"MongoDB error finding conversation by id {conversation_id}: {e}")
+            logging.error(f"透過 ID {conversation_id} 尋找對話時發生 MongoDB 錯誤：{e}")
             return None
