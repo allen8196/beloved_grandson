@@ -7,6 +7,7 @@ def _validate_metric_data(data):
     """
     Validates the data types for daily metric fields.
     Returns an error message string if validation fails, otherwise None.
+    驗證每日指標字段的數據類型。如果驗證失敗，則返回錯誤消息字符串，否則返回 None。
     """
     expected_types = {
         'water_cc': int,
@@ -33,8 +34,7 @@ class DailyMetricService:
 
     def create_daily_metric(self, patient_id, data):
         """
-        Handles the business logic for creating a daily metric.
-        Validates input data and checks if a metric for the current day already exists.
+        處理創建每日度量的業務邏輯。驗證輸入數據，並檢查當前一天的度量是否已經存在。
         """
         validation_error = _validate_metric_data(data)
         if validation_error:
