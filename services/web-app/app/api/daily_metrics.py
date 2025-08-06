@@ -196,6 +196,78 @@ def add_daily_metric(patient_id):
         logging.error(f"Error adding daily metric for patient {patient_id}: {e}", exc_info=True)
         return jsonify({"error": {"code": "INTERNAL_SERVER_ERROR", "message": "An unexpected error occurred."}}), 500
 
+# 開發測試用 API（無需認證）
+@daily_metrics_bp.route('/test/daily_metrics', methods=['POST'])
+@swag_from({
+    'summary': '測試用每日健康日誌 API (Development Test Only)',
+    'description': '僅供開發測試使用，無需認證。實際生產環境請使用有認證的 API。',
+    'tags': ['Development'],
+    'parameters': [
+        {
+            'name': 'body',
+            'in': 'body',
+            'required': True,
+            'schema': {
+                'id': 'TestDailyMetricInput',
+                'properties': {
+                    'patient_id': {'type': 'integer', 'description': '病患 ID (測試用)'},
+                    'water_cc': {'type': 'integer', 'description': '當日喝水量 (cc)'},
+                    'medication': {'type': 'boolean', 'description': '是否服藥'},
+                    'exercise_min': {'type': 'integer', 'description': '當日運動分鐘數'},
+                    'cigarettes': {'type': 'integer', 'description': '當日抽菸支數'}
+                },
+                'required': ['patient_id', 'water_cc', 'medication', 'exercise_min', 'cigarettes']
+            }
+        }
+    ],
+    'responses': {
+        '201': {'description': '測試記錄創建成功'},
+        '400': {'description': '請求格式錯誤'},
+        '500': {'description': '伺服器錯誤'}
+    }
+})
+def test_add_daily_metric():
+    """測試用 API - 開發環境使用"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": {"code": "INVALID_INPUT", "message": "Request body cannot be empty."}}), 400
+
+        patient_id = data.get('patient_id')
+        if not patient_id:
+            return jsonify({"error": {"code": "INVALID_INPUT", "message": "patient_id is required."}}), 400
+
+        # 移除 patient_id 從 data 中，因為 service 不需要它
+        metric_data = {k: v for k, v in data.items() if k != 'patient_id'}
+
+        service = DailyMetricService()
+        new_metric, error = service.create_daily_metric(patient_id, metric_data)
+
+        if error:
+            if "not found" in error.lower():
+                return jsonify({"error": {"code": "RESOURCE_NOT_FOUND", "message": error}}), 404
+            if "already exists" in error.lower():
+                return jsonify({"error": {"code": "CONFLICT", "message": error}}), 409
+            return jsonify({"error": {"code": "INVALID_INPUT", "message": error}}), 400
+
+        return jsonify({
+            "success": True,
+            "message": "測試記錄已成功建立",
+            "data": {
+                "log_id": new_metric.id,
+                "created_at": new_metric.created_at.isoformat(),
+                "water_cc": new_metric.water_cc,
+                "medication": new_metric.medication,
+                "exercise_min": new_metric.exercise_min,
+                "cigarettes": new_metric.cigarettes
+            }
+        }), 201
+    except BadRequest:
+        return jsonify({"error": {"code": "BAD_REQUEST", "message": "Invalid JSON format."}}), 400
+    except Exception as e:
+        logging.error(f"Error in test API for patient {data.get('patient_id', 'unknown')}: {e}", exc_info=True)
+        return jsonify({"error": {"code": "INTERNAL_SERVER_ERROR", "message": "An unexpected error occurred."}}), 500
+
 @daily_metrics_bp.route('/<int:patient_id>/daily_metrics/<string:log_date>', methods=['PUT'])
 @jwt_required()
 @swag_from({

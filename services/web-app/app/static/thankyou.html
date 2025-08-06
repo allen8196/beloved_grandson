@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>問卷完成</title>
+    <style>
+      body {
+        font-family: Arial, "微軟正黑體", sans-serif;
+        margin: 0;
+        padding: 20px;
+        background-color: #f5f5f5;
+        color: #333;
+        font-size: 20px;
+        line-height: 1.5;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+      }
+
+      .container {
+        max-width: 500px;
+        margin: 0 auto;
+        padding: 30px;
+        background-color: #fff;
+        border-radius: 15px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        text-align: center;
+      }
+
+      .success-icon {
+        font-size: 80px;
+        color: #28a745;
+        margin-bottom: 20px;
+        animation: bounce 1s ease-in-out;
+      }
+
+      @keyframes bounce {
+        0%,
+        20%,
+        50%,
+        80%,
+        100% {
+          transform: translateY(0);
+        }
+        40% {
+          transform: translateY(-10px);
+        }
+        60% {
+          transform: translateY(-5px);
+        }
+      }
+
+      h1 {
+        font-size: 32px;
+        color: #28a745;
+        margin-bottom: 20px;
+        font-weight: bold;
+      }
+
+      .message {
+        font-size: 22px;
+        color: #666;
+        margin-bottom: 30px;
+        line-height: 1.6;
+      }
+
+      .note {
+        background-color: #e7f3ff;
+        padding: 20px;
+        border-radius: 10px;
+        margin-top: 20px;
+        font-size: 18px;
+        border-left: 4px solid #007bff;
+      }
+
+      @media screen and (max-width: 480px) {
+        body {
+          padding: 10px;
+        }
+
+        .container {
+          padding: 20px;
+        }
+
+        h1 {
+          font-size: 28px;
+        }
+
+        .message {
+          font-size: 20px;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="container">
+      <div class="success-icon">✅</div>
+      <h1>問卷填寫完成！</h1>
+      <div class="message">
+        感謝您填寫CAT健康問卷與mMRC呼吸困難量表。<br />
+        您的資料已成功提交，我們將會為您分析結果。
+      </div>
+      <div class="note">
+        💡 您的回答將有助於醫療團隊更好地了解您的健康狀況，並提供適合的建議。
+      </div>
+    </div>
+
+    <script>
+      // 如果在 LINE 內瀏覽器中，3秒後自動關閉
+      setTimeout(() => {
+        if (typeof liff !== "undefined" && liff.isInClient()) {
+          liff.closeWindow();
+        }
+      }, 3000);
+    </script>
+  </body>
+</html>
