@@ -183,6 +183,7 @@ class LineService:
                 # --- 上傳到 MinIO 並附上元數據 ---
                 minio_service = get_minio_service()
                 bucket_name = 'audio-uploads'
+                # TODO: LINE下載的音檔大多都是m4a，但未來要新增判斷是mp3還是m4a
                 object_name = f"{user.id}_{uuid.uuid4()}.m4a"
                 metadata = {}
                 if duration_ms > 0:

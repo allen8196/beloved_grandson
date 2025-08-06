@@ -24,7 +24,6 @@ def message_callback(ch, method, properties, body, app):
         try:
             # 將收到的 bytes 格式訊息解碼為 JSON 物件
             message = json.loads(body)
-            print(message, '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
 
             patient_id = message.get("patient_id") # 獲取使用者 ID
             ai_response = message.get("ai_response") # 獲取 AI 回應內容
