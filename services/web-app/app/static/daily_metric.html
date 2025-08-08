@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>每日健康紀錄</title>
+    <style>
+      body {
+        font-family: Arial, "微軟正黑體", sans-serif;
+        background-color: #f8faff;
+        margin: 0;
+        padding: 0;
+        font-size: 18px;
+      }
+      .container {
+        max-width: 480px;
+        margin: auto;
+        padding: 20px;
+      }
+      h2 {
+        text-align: center;
+        color: #007bff;
+        margin-bottom: 15px;
+      }
+      .question {
+        display: none;
+      }
+      .question.active {
+        display: block;
+      }
+      .option-btn {
+        display: block;
+        width: 100%;
+        padding: 15px;
+        margin: 8px 0;
+        font-size: 20px;
+        border: none;
+        border-radius: 10px;
+        background-color: #eaf3ff;
+        cursor: pointer;
+        text-align: left;
+      }
+      .option-btn:hover {
+        background-color: #d6e9ff;
+      }
+      .option-btn.selected {
+        background-color: #28a745;
+        color: white;
+        border: 2px solid #1e7e34;
+      }
+      .input-selected {
+        background-color: #e8f5e8 !important;
+        border-color: #28a745 !important;
+      }
+      input[type="text"],
+      input[type="number"] {
+        width: 95%;
+        padding: 12px;
+        font-size: 18px;
+        margin: 8px 0;
+        border-radius: 8px;
+        border: 1px solid #ccc;
+      }
+      .next-btn {
+        background-color: #007bff;
+        color: white;
+        padding: 15px;
+        border: none;
+        width: 100%;
+        font-size: 20px;
+        border-radius: 10px;
+        cursor: pointer;
+        margin-top: 15px;
+      }
+      .next-btn:hover {
+        background-color: #0056b3;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <!-- Q1 -->
+      <div class="question active" id="q1">
+        <h2>你今天喝多少水（ml）？</h2>
+        <button class="option-btn" onclick="setAnswer('water', '500')">
+          500ml
+        </button>
+        <button class="option-btn" onclick="setAnswer('water', '1000')">
+          1000ml
+        </button>
+        <button class="option-btn" onclick="setAnswer('water', '1500')">
+          1500ml
+        </button>
+        <button class="option-btn" onclick="setAnswer('water', '2000')">
+          2000ml
+        </button>
+        <input type="number" id="water-input" placeholder="手動輸入 (ml)" />
+        <button class="next-btn" onclick="nextQuestion('water', 'q1', 'q2')">
+          下一題
+        </button>
+      </div>
+
+      <!-- Q2 -->
+      <div class="question" id="q2">
+        <h2>你今天吸藥了嗎？</h2>
+        <button class="option-btn" onclick="setAnswer('med', '是')">是</button>
+        <button class="option-btn" onclick="setAnswer('med', '否')">否</button>
+        <input type="text" id="med-input" placeholder="手動輸入" />
+        <button class="next-btn" onclick="nextQuestion('med', 'q2', 'q3')">
+          下一題
+        </button>
+      </div>
+
+      <!-- Q3 -->
+      <div class="question" id="q3">
+        <h2>你今天運動多久？</h2>
+        <button class="option-btn" onclick="setAnswer('exercise', '0')">
+          0min (休息日)
+        </button>
+        <button class="option-btn" onclick="setAnswer('exercise', '10')">
+          10min
+        </button>
+        <button class="option-btn" onclick="setAnswer('exercise', '20')">
+          20min
+        </button>
+        <button class="option-btn" onclick="setAnswer('exercise', '30')">
+          30min
+        </button>
+        <input
+          type="number"
+          id="exercise-input"
+          placeholder="手動輸入 (分鐘)"
+        />
+        <button class="next-btn" onclick="nextQuestion('exercise', 'q3', 'q4')">
+          下一題
+        </button>
+      </div>
+
+      <!-- Q4 -->
+      <div class="question" id="q4">
+        <h2>今天抽了幾支菸？</h2>
+        <button class="option-btn" onclick="setAnswer('smoke', '0')">
+          很棒沒抽
+        </button>
+        <button class="option-btn" onclick="setAnswer('smoke', '5')">
+          5支
+        </button>
+        <button class="option-btn" onclick="setAnswer('smoke', '10')">
+          10支（半包）
+        </button>
+        <button class="option-btn" onclick="setAnswer('smoke', '20')">
+          20支（一包）
+        </button>
+        <input type="number" id="smoke-input" placeholder="手動輸入 (支)" />
+        <button class="next-btn" onclick="submitForm()">送出紀錄</button>
+      </div>
+    </div>
+
+    <script>
+      const answers = {};
+
+      function setAnswer(key, value) {
+        answers[key] = value;
+
+        // 移除當前問題中所有按鈕的選中狀態
+        const currentQuestion = document.querySelector(".question.active");
+        if (currentQuestion) {
+          const buttons = currentQuestion.querySelectorAll(".option-btn");
+          buttons.forEach((btn) => btn.classList.remove("selected"));
+        }
+
+        // 標記當前點擊的按鈕為選中狀態
+        event.target.classList.add("selected");
+
+        // 同步更新對應的輸入欄位顯示
+        const inputField = document.getElementById(`${key}-input`);
+        if (inputField) {
+          if (key === "med") {
+            // 藥物欄位特殊處理：顯示中文但不影響數值
+            inputField.placeholder = `已選擇：${value}`;
+            inputField.value = ""; // 清空手動輸入
+          } else {
+            inputField.value = value;
+          }
+          // 視覺回饋：輸入欄位變色表示已選擇
+          inputField.classList.add("input-selected");
+        }
+      }
+
+      function nextQuestion(key, currentId, nextId) {
+        const manualValue = document.getElementById(`${key}-input`).value;
+        if (manualValue) {
+          answers[key] = manualValue;
+        }
+        if (!answers[key]) {
+          alert("請先選擇或輸入一個數值");
+          return;
+        }
+        document.getElementById(currentId).classList.remove("active");
+        document.getElementById(nextId).classList.add("active");
+      }
+
+      function submitForm() {
+        const manualValue = document.getElementById("smoke-input").value;
+        if (manualValue) {
+          answers["smoke"] = manualValue;
+        }
+        if (!answers["smoke"]) {
+          alert("請先選擇或輸入一個數值");
+          return;
+        }
+
+        // 轉換資料格式以符合後端 API 期望
+        const apiData = {
+          patient_id: getUserId() || 1, // 測試用預設 ID
+          water_cc: parseInt(answers.water),
+          medication: answers.med === "是" ? true : false,
+          exercise_min: parseInt(answers.exercise),
+          cigarettes: parseInt(answers.smoke),
+        };
+
+        console.log("準備送出的資料:", apiData);
+
+        // 使用測試 API（無需認證）
+        fetch("/api/v1/patients/test/daily_metrics", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(apiData),
+        })
+          .then((res) => {
+            if (!res.ok) {
+              throw new Error(`HTTP error! status: ${res.status}`);
+            }
+            return res.json();
+          })
+          .then((data) => {
+            alert("已成功送出健康紀錄！");
+            console.log("Server 回應：", data);
+            // 可選：重置表單或導向其他頁面
+          })
+          .catch((err) => {
+            console.error("送出失敗:", err);
+            alert("送出失敗，請稍後再試");
+          });
+      }
+
+      // 測試用函數 - 實際使用時需要替換為真實的用戶認證
+      function getUserId() {
+        // 測試用：從 localStorage 獲取或使用預設值
+        return localStorage.getItem("patient_id") || 1;
+      }
+
+      // 開發測試用：設置測試用戶 ID
+      function setTestUserId(userId) {
+        localStorage.setItem("patient_id", userId);
+        console.log(`設置測試用戶 ID: ${userId}`);
+      }
+
+      // 在頁面載入時設置預設測試用戶（僅開發環境）
+      window.addEventListener("DOMContentLoaded", function () {
+        if (!localStorage.getItem("patient_id")) {
+          setTestUserId(1);
+        }
+        console.log(`當前測試用戶 ID: ${getUserId()}`);
+      });
+    </script>
+  </body>
+</html>

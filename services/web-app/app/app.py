@@ -10,6 +10,7 @@ from .api.uploads import uploads_bp
 from .api.users import users_bp
 from .api.daily_metrics import daily_metrics_bp
 from .api.chat import bp as chat_bp # Explicitly import and alias the blueprint
+from .api.voice import bp as voice_bp # Import voice API blueprint
 from .core.notification_service import start_notification_listener
 
 def create_app(config_name='default'):
@@ -38,6 +39,7 @@ def create_app(config_name='default'):
     app.register_blueprint(daily_metrics_bp)
     app.register_blueprint(uploads_bp)
     app.register_blueprint(chat_bp) # Register the aliased blueprint
+    app.register_blueprint(voice_bp) # Register the voice API blueprint
 
     # 4. 註冊全域錯誤處理器
     @app.errorhandler(404)

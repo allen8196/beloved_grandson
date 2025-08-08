@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>萬芳CAT健康問卷</title>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <style>
+      body {
+        font-family: Arial, "微軟正黑體", sans-serif;
+        margin: 0;
+        padding: 20px;
+        background-color: #f5f5f5;
+        color: #333;
+        font-size: 20px;
+        line-height: 1.5;
+        transition: background-color 0.3s, color 0.3s;
+      }
+
+      .container {
+        max-width: 100%;
+        margin: 0 auto;
+        padding: 15px;
+        background-color: #fff;
+        border-radius: 15px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        transition: background-color 0.3s, border 0.3s;
+      }
+
+      h2 {
+        font-size: 28px;
+        color: #007bff;
+        text-align: center;
+        margin-bottom: 25px;
+        font-weight: bold;
+        padding: 10px 0;
+        border-bottom: 2px solid #eaeaea;
+        transition: color 0.3s, border-bottom-color 0.3s;
+      }
+
+      #options {
+        list-style-type: none;
+        padding: 0;
+        margin: 0;
+      }
+
+      #options li {
+        margin-bottom: 15px;
+      }
+
+      button {
+        width: 100%;
+        padding: 20px 15px;
+        font-size: 22px;
+        border: none;
+        border-radius: 10px;
+        background-color: #f0f7ff;
+        color: #333;
+        text-align: left;
+        cursor: pointer;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: flex-start;
+        line-height: 1.4;
+      }
+
+      button:hover,
+      button:focus {
+        background-color: #d4e6ff;
+        transform: translateY(-2px);
+      }
+
+      button:active {
+        transform: translateY(0);
+      }
+
+      .score {
+        font-size: 32px;
+        font-weight: bold;
+        margin-right: 15px;
+        color: #007bff;
+        min-width: 50px;
+        text-align: center;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #e8f4f8;
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        flex-shrink: 0;
+      }
+
+      .emoji {
+        font-size: 28px;
+        margin-right: 15px;
+        display: inline-block;
+        min-width: 40px;
+        text-align: center;
+      }
+
+      .description {
+        flex: 1;
+        padding-left: 10px;
+      }
+
+      .helper-text {
+        text-align: center;
+        margin-top: 20px;
+        font-size: 18px;
+        color: #666;
+        transition: color 0.3s;
+      }
+
+      .contrast-toggle {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: #ddd;
+        border: none;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        font-size: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: background-color 0.3s;
+      }
+
+      body.high-contrast {
+        background-color: #000;
+        color: #fff;
+      }
+
+      body.high-contrast .container {
+        background-color: #000;
+        border: 2px solid #fff;
+      }
+
+      body.high-contrast h2 {
+        color: #ffff00;
+        border-bottom-color: #fff;
+      }
+
+      body.high-contrast .score {
+        background-color: #333;
+        color: #ffff00;
+      }
+
+      body.high-contrast button {
+        background-color: #000;
+        color: #fff;
+        border: 2px solid #fff;
+      }
+
+      body.high-contrast .helper-text {
+        color: #fff;
+      }
+
+      body.high-contrast button:hover,
+      body.high-contrast button:focus {
+        background-color: #333;
+      }
+
+      #loading-text {
+        display: none;
+        color: #007bff;
+        text-align: center;
+        font-size: 20px;
+        margin-top: 10px;
+        transition: color 0.3s;
+      }
+
+      body.high-contrast #loading-text {
+        color: #ffff00;
+      }
+
+      @media screen and (max-width: 480px) {
+        body {
+          font-size: 24px;
+        }
+
+        button {
+          font-size: 26px;
+        }
+
+        .score {
+          font-size: 28px;
+          width: 45px;
+          height: 45px;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <button
+      class="contrast-toggle"
+      onclick="toggleContrast()"
+      aria-label="切換高對比度模式"
+    >
+      👁️
+    </button>
+    <div class="container" role="main">
+      <h2 id="questionText">請問您最近咳嗽的情形？</h2>
+      <ul id="options" role="list"></ul>
+      <p id="loading-text">正在提交中，請稍候...</p>
+      <p class="helper-text">請點選最符合您情況的選項</p>
+    </div>
+    <script>
+      const questions = [
+        "請問您最近咳嗽的情形？",
+        "您覺得肺裡面有痰卡住嗎？",
+        "您有覺得胸口會悶、會緊嗎？",
+        "您走樓梯或上坡會喘嗎？",
+        "在家裡活動有沒有受到影響？",
+        "您有信心自己出門走走嗎？",
+        "最近睡眠情況怎麼樣？",
+        "最近精神狀況如何？",
+      ];
+
+      const optionsList = [
+        [
+          "✅ 完全沒咳嗽/n（整天都沒有）",
+          "😊 偶爾咳一下/n（一天1~2次）",
+          "😐 有時會咳（不太影響）",
+          "🙁 常常咳（有點困擾）",
+          "🤢 幾乎每天咳（很不舒服）",
+          "🥵 一直咳不停（非常難受）",
+        ],
+        [
+          "✅ 完全沒痰（肺部清爽）",
+          "😊 偶爾卡痰（但能排出）",
+          "😐 有點痰（偶爾咳出）",
+          "🙁 常有痰（不舒服）",
+          "🤢 經常很多痰（影響說話）",
+          "🥵 痰多到呼吸困難",
+        ],
+        [
+          "✅ 完全不悶不緊",
+          "😊 偶爾覺得胸悶",
+          "😐 有時會緊一下",
+          "🙁 常常悶住不舒服",
+          "🤢 幾乎每天胸口緊",
+          "🥵 胸悶難受到坐不住",
+        ],
+        [
+          "✅ 完全不喘（輕鬆走）",
+          "😊 偶爾會喘一下",
+          "😐 有時會喘（走快一點）",
+          "🙁 常常一走就喘",
+          "🤢 幾乎每天一走就喘",
+          "🥵 太喘沒辦法走",
+        ],
+        [
+          "✅ 活動很方便",
+          "😊 偶爾會懶得動",
+          "😐 有些家務沒力做",
+          "🙁 常常覺得做不來",
+          "🤢 幾乎不太能動",
+          "🥵 完全無法自己活動",
+        ],
+        [
+          "✅ 很有信心自己出門",
+          "😊 大部分都可以出門",
+          "😐 有時會擔心出門",
+          "🙁 常常不敢自己走",
+          "🤢 幾乎都不出門",
+          "🥵 完全不敢離家",
+        ],
+        [
+          "✅ 睡得很好",
+          "😊 偶爾睡不好",
+          "😐 有時會醒來",
+          "🙁 常常睡不好",
+          "🤢 幾乎每天睡不好",
+          "🥵 完全睡不好、精神差",
+        ],
+        [
+          "✅ 精神很好（活力充沛）",
+          "😊 偶爾覺得累",
+          "😐 有點沒精神",
+          "🙁 常常提不起勁",
+          "🤢 幾乎整天都累",
+          "🥵 完全沒力做事",
+        ],
+      ];
+
+      let current = 0;
+      let userId = "unknown_user";
+      let patientId = null;
+      let accessToken = null;
+      let authenticationFailed = false;
+      const answers = [];
+      const LIFF_ID = "你的LIFF_ID"; // 請替換為實際的 LIFF ID
+
+      // 修正：定義缺少的變數
+      let isTaiwanese = false; // 預設使用國語
+
+      async function main() {
+        try {
+          await liff.init({ liffId: LIFF_ID });
+          if (!liff.isLoggedIn()) {
+            liff.login();
+            return;
+          }
+
+          const context = liff.getContext();
+          if (context && context.userId) {
+            userId = context.userId;
+            // 獲取 LIFF access token
+            accessToken = liff.getAccessToken();
+
+            // 嘗試獲取 patient_id 和認證
+            try {
+              await authenticateAndGetPatientId();
+            } catch (authError) {
+              console.error("認證失敗:", authError);
+              authenticationFailed = true;
+              alert(
+                "認證失敗，問卷數據將無法儲存到您的帳戶中，但您仍可繼續填寫問卷。"
+              );
+            }
+          } else {
+            authenticationFailed = true;
+            alert(
+              "無法獲取用戶資訊，問卷數據將無法儲存，但您仍可繼續填寫問卷。"
+            );
+          }
+
+          renderQuestion();
+          checkSavedContrast();
+        } catch (err) {
+          console.error("LIFF 初始化失敗:", err);
+          authenticationFailed = true;
+          alert("LIFF 初始化失敗，問卷數據將無法儲存，但您仍可繼續填寫問卷。");
+          // 繼續渲染問題，即使LIFF失敗也能使用
+          renderQuestion();
+          checkSavedContrast();
+        }
+      }
+
+      // 新增：認證並獲取 patient_id 的函數
+      async function authenticateAndGetPatientId() {
+        try {
+          const response = await fetch("/api/auth/line/login", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ lineUserId: userId }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            patientId = data.user.id;
+            accessToken = data.access_token; // 使用後端返回的 JWT token
+            console.log("認證成功，Patient ID:", patientId);
+          } else {
+            throw new Error(`認證請求失敗: ${response.status}`);
+          }
+        } catch (error) {
+          console.error("認證過程發生錯誤:", error);
+          throw error;
+        }
+      }
+
+      function renderQuestion() {
+        const questionElement = document.getElementById("questionText");
+        questionElement.innerText = questions[current];
+        speak(questions[current]);
+
+        const list = document.getElementById("options");
+        list.innerHTML = "";
+
+        optionsList[current].forEach((text, index) => {
+          const li = document.createElement("li");
+          li.setAttribute("role", "listitem");
+
+          const button = document.createElement("button");
+          button.onclick = () => submitScore(index);
+          button.tabIndex = 0;
+          button.setAttribute(
+            "aria-label",
+            `分數${index}：${text.replace("/n", " ")}`
+          );
+
+          const scoreElement = document.createElement("div");
+          scoreElement.className = "score";
+          scoreElement.textContent = index;
+
+          const descriptionElement = document.createElement("div");
+          descriptionElement.className = "description";
+          // 處理換行符號
+          const formattedText = text.replace("/n", "<br>");
+          descriptionElement.innerHTML = formattedText;
+
+          button.appendChild(scoreElement);
+          button.appendChild(descriptionElement);
+
+          li.appendChild(button);
+          list.appendChild(li);
+        });
+      }
+
+      function speak(text) {
+        if (!("speechSynthesis" in window)) return;
+
+        const synth = window.speechSynthesis;
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.lang = "zh-TW"; // 使用台灣中文
+
+        // 取消任何正在進行的語音
+        synth.cancel();
+
+        // 獲取所有可用的語音
+        const voices = synth.getVoices();
+
+        // 尋找中文語音
+        const chineseVoice = voices.find(
+          (voice) => voice.lang.includes("zh-TW") || voice.lang.includes("cmn")
+        );
+
+        if (chineseVoice) {
+          utter.voice = chineseVoice;
+        }
+
+        // 播放語音
+        synth.speak(utter);
+      }
+
+      async function submitScore(score) {
+        answers.push(score);
+
+        if (current < questions.length - 1) {
+          current++;
+          renderQuestion();
+        } else {
+          // CAT 量表完成，提交數據
+          showLoading(true);
+          await submitCATResults();
+        }
+      }
+
+      async function submitCATResults() {
+        if (authenticationFailed || !patientId || !accessToken) {
+          alert(
+            "由於認證失敗，CAT問卷數據無法儲存到您的帳戶，但將繼續進行下一個量表。"
+          );
+          setTimeout(() => {
+            window.location.href = "mmrc_form.html";
+          }, 1000);
+          return;
+        }
+
+        try {
+          // 將數組答案映射為後端期望的格式
+          const scoreFields = [
+            "cough_score",
+            "phlegm_score",
+            "chest_score",
+            "breath_score",
+            "limit_score",
+            "confidence_score",
+            "sleep_score",
+            "energy_score",
+          ];
+
+          const payload = {};
+          scoreFields.forEach((field, index) => {
+            payload[field] = answers[index] || 0;
+          });
+
+          payload.record_date = new Date().toISOString().split("T")[0]; // YYYY-MM-DD 格式
+
+          const response = await fetch(
+            `/api/v1/patients/${patientId}/questionnaires/cat`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${accessToken}`,
+              },
+              body: JSON.stringify(payload),
+            }
+          );
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(
+              `提交失敗: ${response.status} - ${
+                errorData.error?.message || "Unknown error"
+              }`
+            );
+          }
+
+          const result = await response.json();
+          console.log("CAT 問卷提交成功:", result);
+          alert("CAT問卷提交成功！");
+        } catch (error) {
+          console.error("CAT提交失敗:", error);
+          alert(`CAT問卷提交失敗: ${error.message}，但將繼續進行下一個量表`);
+        }
+
+        // 無論提交成功或失敗，都繼續進行流程
+        setTimeout(() => {
+          window.location.href = "mmrc_form.html";
+        }, 1000);
+      }
+
+      function showLoading(show) {
+        document.getElementById("loading-text").style.display = show
+          ? "block"
+          : "none";
+      }
+
+      function toggleContrast() {
+        document.body.classList.toggle("high-contrast");
+        const isHighContrast =
+          document.body.classList.contains("high-contrast");
+        localStorage.setItem("highContrast", isHighContrast);
+      }
+
+      function checkSavedContrast() {
+        const isHighContrast = localStorage.getItem("highContrast") === "true";
+        if (isHighContrast) {
+          document.body.classList.add("high-contrast");
+        }
+      }
+
+      // 確保語音引擎已加載
+      function loadVoices() {
+        return new Promise((resolve) => {
+          const synth = window.speechSynthesis;
+          let voices = synth.getVoices();
+
+          if (voices.length > 0) {
+            resolve(voices);
+            return;
+          }
+
+          // 如果語音尚未加載，等待voiceschanged事件
+          synth.onvoiceschanged = () => {
+            voices = synth.getVoices();
+            resolve(voices);
+          };
+        });
+      }
+
+      // 頁面載入時初始化
+      document.addEventListener("DOMContentLoaded", async () => {
+        // 先加載語音引擎
+        await loadVoices();
+        main();
+      });
+    </script>
+  </body>
+</html>
