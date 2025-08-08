@@ -239,3 +239,66 @@ def serve_liff_page():
     # e.g., app = Flask(__name__, static_folder='../static')
     # Here we assume the static folder is 'static' at the app's root
     return send_from_directory(current_app.static_folder, 'liff.html')
+
+
+@auth_bp.route('/cat_form', methods=['GET'])
+@swag_from({
+    'summary': '提供 CAT 問卷頁面',
+    'description': '提供 LINE Front-end Framework (LIFF) 的CAT、ＭＭＲＣ問卷頁面。',
+    'tags': ['CAT', 'MMRC'],
+    'responses': {
+        '200': {
+            'description': '成功回傳 LIFF HTML 頁面',
+            'content': {
+                'text/html': {}
+            }
+        }
+    }
+})
+def serve_cat_form_page():
+    """提供 CAT 問卷靜態頁面"""
+    from flask import current_app, send_from_directory
+    # The static folder should be configured at the app level
+    # e.g., app = Flask(__name__, static_folder='../static')
+    # Here we assume the static folder is 'static' at the app's root
+    return send_from_directory(current_app.static_folder, 'cat_form.html')
+
+
+@auth_bp.route('/daily_metric', methods=['GET'])
+@swag_from({
+    'summary': '提供每日健康紀錄頁面',
+    'description': '提供每日健康紀錄的頁面。',
+    'tags': ['Health Data & Questionnaires'],
+    'responses': {
+        '200': {
+            'description': '成功回傳每日健康紀錄 HTML 頁面',
+            'content': {
+                'text/html': {}
+            }
+        }
+    }
+})
+def serve_daily_metric_page():
+    """提供每日健康紀錄靜態頁面"""
+    from flask import current_app, send_from_directory
+    return send_from_directory(current_app.static_folder, 'daily_metric.html')
+
+
+@auth_bp.route('/mmrc_form', methods=['GET'])
+@swag_from({
+    'summary': '提供 MMRC 問卷頁面',
+    'description': '提供 MMRC 問卷的頁面。',
+    'tags': ['Health Data & Questionnaires'],
+    'responses': {
+        '200': {
+            'description': '成功回傳 MMRC HTML 頁面',
+            'content': {
+                'text/html': {}
+            }
+        }
+    }
+})
+def serve_mmrc_form_page():
+    """提供 MMRC 問卷靜態頁面"""
+    from flask import current_app, send_from_directory
+    return send_from_directory(current_app.static_folder, 'mmrc_form.html')
