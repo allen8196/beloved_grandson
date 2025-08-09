@@ -2,7 +2,7 @@ import google.generativeai as genai
 import os
 
 class LLMService:
-    def generate_response(self, text: str, task_data={}) -> str:
+    def generate_response(self, task_data={}) -> str:
         """
         Generates a response from the LLM.
         This is a placeholder implementation.
@@ -11,9 +11,9 @@ class LLMService:
         genai.configure(api_key=os.environ.get("GOOGLE_API_KEY", ""))
         model = genai.GenerativeModel('gemini-2.5-flash')
 
-        print(f"提示詞：{text}")
+        print(f"提示詞：{task_data["text"]}")
         try:
-            response = model.generate_content(text)
+            response = model.generate_content(task_data["text"])
 
         except Exception as e:
             print(f"發生錯誤：{e}")
@@ -40,6 +40,6 @@ if __name__ == "__main__":
 
     # 測試生成回應
     test_message_1 = "你好，我最近睡眠不好，該怎麼辦？"
-    response_1 = llm_service.generate_response(test_message_1, task_data=task_data)
+    response_1 = llm_service.generate_response(task_data=task_data)
     print(f"用戶訊息: {test_message_1}")
     print(f"AI 回應: {response_1}\n")
