@@ -112,7 +112,7 @@ if __name__ == '__main__':
                         notification = {
                             "status": "completed",
                             "user_transcript": task_data['text'],
-                            "ai_response": llm_response.get("message", "")
+                            "ai_response": llm_response
                         }
                         publish_notification(notification, patient_id)
                     elif 'bucket_name' in task_data and 'object_name' in task_data:
