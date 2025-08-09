@@ -32,7 +32,7 @@ def publish_notification(message: dict, patient_id: int):
 def process_text_task(task_data={}):
     """透過 llm-app 來處理文字訊息。"""
     print("建立 LLM 服務...", flush=True)
-    response = LLMService().generate_response(task_data['text'])
+    response = LLMService().generate_response(task_data=task_data)
     print(f"成功呼叫 LLM 服務。回應: {response}", flush=True)
     return response
 
@@ -47,12 +47,13 @@ def process_audio_task(patient_id: int, audio_duration_ms=60000, task_data={}):
         user_transcript = STTService().transcribe_audio(task_data['bucket_name'], task_data['object_name'])
         if not user_transcript:
             raise ValueError("STT 服務未返回有效的轉錄文字")
+        task_data['text'] = user_transcript  # 將轉錄文字加入 task_data
         print(f"STT 結果: {user_transcript}", flush=True)
 
 
         # 步驟 2: LLM - 產生 AI 回應
         print(f"--- 開始 LLM 處理 ---", flush=True)
-        ai_response = LLMService().generate_response(user_transcript)
+        ai_response = LLMService().generate_response(task_data=task_data)
         if not ai_response:
             raise ValueError("LLM 服務未返回有效的 AI 回應")
         print(f"LLM 結果: {ai_response}", flush=True)
