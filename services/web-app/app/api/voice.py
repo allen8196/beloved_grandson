@@ -350,7 +350,7 @@ def voice_chat():
             content_type=file.content_type or 'audio/wav'
         )
         
-        # 調用AI Worker的語音聊天API
+        # 調用AI Worker的語音聊天API（同步 HTTP 流程，保持與 voice_chat.md 一致）
         ai_worker_url = current_app.config.get('AI_WORKER_VOICE_URL', 'http://ai-worker:8001')
         
         try:
@@ -381,7 +381,7 @@ def voice_chat():
                 'duration_ms': 3000
             }
         
-        # 生成AI語音的訪問URL
+        # 生成AI語音的訪問URL（預簽名 GET），回傳給前端直接播放
         tts_bucket = current_app.config.get('TTS_BUCKET', 'audio-bucket')
         ai_audio_object = chat_data.get('ai_audio_object')
         

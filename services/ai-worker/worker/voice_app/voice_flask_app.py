@@ -24,27 +24,29 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)  # 啟用CORS
 
-# 全局變量存儲voice worker實例
+# 可選：僅在需要時從 API 進程啟動 RabbitMQ worker
 voice_worker = None
 worker_thread = None
 
-def start_voice_worker():
-    """在後台線程中啟動voice worker"""
-    global voice_worker
+def _maybe_start_worker_in_api_process():
+    """僅當 VOICE_API_START_WORKER=true 時，在 API 行程內啟動消費者。"""
     try:
-        voice_worker = get_voice_worker()
-        voice_worker.start_consuming()
+        start_flag = os.getenv("VOICE_API_START_WORKER", "false").lower() == "true"
+        if not start_flag:
+            logger.info("Skipping in-process voice worker (VOICE_API_START_WORKER is not true)")
+            return
+        global voice_worker, worker_thread
+        if worker_thread is None:
+            voice_worker = get_voice_worker()
+            worker_thread = threading.Thread(target=voice_worker.start_consuming, daemon=True)
+            worker_thread.start()
+            logger.info("Voice worker thread started inside API process")
     except Exception as e:
         logger.error("Voice worker啟動失敗: %s", e)
 
 @app.before_first_request
 def initialize_worker():
-    """在第一個請求前初始化worker"""
-    global worker_thread
-    if worker_thread is None:
-        worker_thread = threading.Thread(target=start_voice_worker, daemon=True)
-        worker_thread.start()
-        logger.info("Voice worker線程已啟動")
+    _maybe_start_worker_in_api_process()
 
 @app.route('/')
 def root():
