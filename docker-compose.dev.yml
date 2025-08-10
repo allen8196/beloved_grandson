@@ -25,17 +25,17 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    container_name: dev_redis_cache
-    volumes:
-      - dev_redisdata:/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: dev_redis_cache
+  #   volumes:
+  #     - dev_redisdata:/data
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
 
   rabbitmq:
     image: rabbitmq:3.12-management-alpine
@@ -132,7 +132,7 @@ services:
     command: flask run --host=0.0.0.0 --port=5000 --debug
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_ADMIN_USER}:${POSTGRES_ADMIN_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      - REDIS_URL=redis://redis:6379
+      # - REDIS_URL=redis://redis:6379
       - MONGO_URL=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
       - RABBITMQ_NOTIFICATION_QUEUE=notifications_queue
@@ -141,8 +141,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
+      # redis:
+      #   condition: service_healthy
       mongodb:
         condition: service_healthy
 
@@ -161,7 +161,7 @@ services:
       - ./services/ai-worker:/app
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_ADMIN_USER}:${POSTGRES_ADMIN_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      - REDIS_URL=redis://redis:6379
+      # - REDIS_URL=redis://redis:6379
       - MONGO_URL=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
       - MINIO_ENDPOINT=minio:9000
@@ -176,7 +176,7 @@ services:
     depends_on:
       - rabbitmq
       - postgres
-      - redis
+      # - redis
       - mongodb
       - minio
 
@@ -209,7 +209,7 @@ services:
 # -------------------------------------------------
 volumes:
   dev_pgdata:
-  dev_redisdata:
+  # dev_redisdata:
   dev_milvusdata:
   dev_minio:
   dev_etcd:
