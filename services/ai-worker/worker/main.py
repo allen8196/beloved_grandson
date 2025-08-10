@@ -2,7 +2,6 @@ import os
 import pika
 import json
 import time
-import uuid
 from llm_app.llm_service import LLMService
 from stt_app.stt_service import STTService
 from tts_app.tts_service import TTSService
@@ -30,30 +29,31 @@ def publish_notification(message: dict, patient_id: int):
         raise
 
 
-def process_text_task(text_message: str):
+def process_text_task(task_data={}):
     """透過 llm-app 來處理文字訊息。"""
     print("建立 LLM 服務...", flush=True)
-    response = LLMService().generate_response(text_message)
+    response = LLMService().generate_response(task_data=task_data)
     print(f"成功呼叫 LLM 服務。回應: {response}", flush=True)
     return response
 
 
-def process_audio_task(patient_id: int, bucket_name: str, object_name: str, audio_duration_ms=60000):
+def process_audio_task(patient_id: int, audio_duration_ms=60000, task_data={}):
     """
     透過 STT -> LLM -> TTS 管道處理音訊檔案任務。
     """
     try:
         # 步驟 1: STT - 語音轉文字
-        print(f"--- 開始 STT 處理: {object_name} ---", flush=True)
-        user_transcript = STTService().transcribe_audio(bucket_name, object_name)
+        print(f"--- 開始 STT 處理: {task_data['object_name']} ---", flush=True)
+        user_transcript = STTService().transcribe_audio(task_data['bucket_name'], task_data['object_name'])
         if not user_transcript:
             raise ValueError("STT 服務未返回有效的轉錄文字")
+        task_data['text'] = user_transcript  # 將轉錄文字加入 task_data
         print(f"STT 結果: {user_transcript}", flush=True)
 
 
         # 步驟 2: LLM - 產生 AI 回應
         print(f"--- 開始 LLM 處理 ---", flush=True)
-        ai_response = LLMService().generate_response(user_transcript)
+        ai_response = LLMService().generate_response(task_data=task_data)
         if not ai_response:
             raise ValueError("LLM 服務未返回有效的 AI 回應")
         print(f"LLM 結果: {ai_response}", flush=True)
@@ -69,7 +69,7 @@ def process_audio_task(patient_id: int, bucket_name: str, object_name: str, audi
         # 步驟 4: 發送成功通知
         notification_message = {
             "status": "completed",
-            "original_file": object_name,
+            "original_file": task_data['object_name'],
             "user_transcript": user_transcript,
             "ai_response": ai_response,
             "response_audio_url": response_audio_url,
@@ -81,7 +81,7 @@ def process_audio_task(patient_id: int, bucket_name: str, object_name: str, audi
         print(f"音訊處理管道中發生錯誤: {e}", flush=True)
         error_notification = {
             "status": "error",
-            "original_file": object_name,
+            "original_file": task_data['object_name'],
             "error_message": str(e)
         }
         publish_notification(error_notification, patient_id)
@@ -108,7 +108,7 @@ if __name__ == '__main__':
 
                     if 'text' in task_data:
                         print(f" [*] 開始為病患 {patient_id} 處理文字任務...", flush=True)
-                        llm_response = process_text_task(task_data['text'])
+                        llm_response = process_text_task(task_data=task_data)
                         notification = {
                             "status": "completed",
                             "user_transcript": task_data['text'],
@@ -118,7 +118,7 @@ if __name__ == '__main__':
                     elif 'bucket_name' in task_data and 'object_name' in task_data:
                         audio_duration_ms = task_data.get('duration_ms')
                         print(f" [*] 開始為病患 {patient_id} 處理音訊任務...", flush=True)
-                        process_audio_task(patient_id, task_data['bucket_name'], task_data['object_name'], audio_duration_ms)
+                        process_audio_task(patient_id, audio_duration_ms, task_data=task_data)
                     else:
                         print(f" [!] 未知的任務格式: {task_data}", flush=True)
                     print(f" [✔] 任務成功完成。", flush=True)
