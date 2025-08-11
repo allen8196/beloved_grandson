@@ -1,617 +1,410 @@
 <!DOCTYPE html>
-<html class="dark" lang="zh-Hant-TW">
-  <head>
-    <meta charset="utf-8" />
-    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-    <title>即時 AI 語音聊天</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link
-      href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&amp;display=swap"
-      rel="stylesheet"
-    />
-    <link
-      href="https://fonts.googleapis.com/icon?family=Material+Icons"
-      rel="stylesheet"
-    />
-    <style>
-      :root {
-        --gradient-start: #94f4e0;
-        --gradient-mid-1: #5cd6fe;
-        --gradient-mid-2: #6a83f0;
-        --gradient-mid-3: #a28af3;
-        --gradient-end: #ee9eff;
-        --light-bg: #ffffff;
-        --dark-bg: #22374a;
-        --light-text: #333333;
-        --dark-text: #eeeeee;
+<html lang="zh-Hant-TW">
 
-        /* Glassmorphic variables */
-        --glass-bg-light: rgba(255, 255, 255, 0.25);
-        --glass-bg-dark: rgba(34, 55, 74, 0.25);
-        --glass-border-light: rgba(255, 255, 255, 0.18);
-        --glass-border-dark: rgba(255, 255, 255, 0.1);
-        --backdrop-blur: blur(20px);
-      }
-      .dark {
-        --bg-color: var(--dark-bg);
-        --text-color: var(--dark-text);
-        --bubble-user-bg: var(--glass-bg-dark);
-        --bubble-ai-bg: var(--glass-bg-dark);
-        --glass-border: var(--glass-border-dark);
-      }
-      .light {
-        --bg-color: var(--light-bg);
-        --text-color: var(--light-text);
-        --bubble-user-bg: var(--glass-bg-light);
-        --bubble-ai-bg: var(--glass-bg-light);
-        --glass-border: var(--glass-border-light);
-      }
-      body {
-        font-family: "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI",
-          "Helvetica Neue", Arial, sans-serif;
-        transition: background-color 0.3s ease, color 0.3s ease;
-        background-image: url("毛玻璃_BG2.png");
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
-        background-attachment: fixed;
-      }
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>即時語音回覆</title>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+  <style>
+    :root {
+      --bg1: #D7ECF5;
+      --bg2: #C1B8E6;
+      --bg3: #6DA9E4;
+      --overlay: rgba(255, 255, 255, .55);
+      --text: #22374A;
+      --hint: #A6A0E8;
+      --label: #6D9BC3;
+    }
 
-      /* Glassmorphic effects */
-      .glass-effect {
-        background: var(--bubble-user-bg);
-        backdrop-filter: var(--backdrop-blur);
-        -webkit-backdrop-filter: var(--backdrop-blur);
-        border: 1px solid var(--glass-border);
-        box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
-      }
+    html,
+    body {
+      height: 100%
+    }
 
-      .glass-container {
-        background: var(--glass-bg-light);
-        backdrop-filter: var(--backdrop-blur);
-        -webkit-backdrop-filter: var(--backdrop-blur);
-        border: 1px solid var(--glass-border);
-        border-radius: 20px;
-      }
+    body {
+      margin: 0;
+      font-family: "Nunito Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      background: url("毛玻璃_BG2.png") center/cover no-repeat fixed;
+      color: var(--text);
+    }
 
-      .dark .glass-container {
-        background: var(--glass-bg-dark);
-      }
-      .bg-gradient-theme {
-        background-image: linear-gradient(
-          to right,
-          var(--gradient-start),
-          var(--gradient-mid-1),
-          var(--gradient-mid-2),
-          var(--gradient-mid-3),
-          var(--gradient-end)
-        );
-      }
-      .chat-bubble {
-        animation: bubble-in 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
-        transform: translateY(10px);
-        opacity: 0;
-      }
-      @keyframes bubble-in {
-        to {
-          transform: translateY(0);
-          opacity: 1;
-        }
-      }
-      .typewriter-cursor::after {
-        content: "▋";
-        animation: blink 1s step-end infinite;
-      }
-      @keyframes blink {
-        from,
-        to {
-          opacity: 1;
-        }
-        50% {
-          opacity: 0;
-        }
-      }
-      .record-button {
-        background: linear-gradient(145deg, #7de2ff, #4ac4fa);
-        box-shadow: 0 4px 15px rgba(92, 214, 254, 0.4);
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-      }
-      .record-button:active {
-        transform: scale(0.95);
-        box-shadow: 0 2px 10px rgba(92, 214, 254, 0.6);
-      }
-      .ripple {
-        position: absolute;
-        border-radius: 50%;
-        background-color: rgba(92, 214, 254, 0.3);
-        transform: scale(0);
-        animation: ripple-effect 0.6s linear;
-        pointer-events: none;
-      }
-      @keyframes ripple-effect {
-        to {
-          transform: scale(4);
-          opacity: 0;
-        }
-      }
-      .dot-flashing {
-        position: relative;
-        width: 10px;
-        height: 10px;
-        border-radius: 5px;
-        background-color: var(--text-color);
-        color: var(--text-color);
-        animation: dotFlashing 1s infinite linear alternate;
-        animation-delay: 0.5s;
-        display: inline-block;
-      }
-      .dot-flashing::before,
-      .dot-flashing::after {
-        content: "";
-        display: inline-block;
-        position: absolute;
-        top: 0;
-      }
-      .dot-flashing::before {
-        left: -15px;
-        width: 10px;
-        height: 10px;
-        border-radius: 5px;
-        background-color: var(--text-color);
-        color: var(--text-color);
-        animation: dotFlashing 1s infinite alternate;
-        animation-delay: 0s;
-      }
-      .dot-flashing::after {
-        left: 15px;
-        width: 10px;
-        height: 10px;
-        border-radius: 5px;
-        background-color: var(--text-color);
-        color: var(--text-color);
-        animation: dotFlashing 1s infinite alternate;
-        animation-delay: 1s;
-      }
-      @keyframes dotFlashing {
-        0% {
-          background-color: var(--text-color);
-        }
-        50%,
-        100% {
-          background-color: rgba(152, 128, 255, 0.2);
-        }
-      }
-    </style>
-    <style>
-      body {
-        min-height: max(884px, 100dvh);
+    .bg-glass-overlay {
+      position: fixed;
+      inset: 0;
+      background: var(--overlay);
+      backdrop-filter: blur(12px)
+    }
+
+    .container {
+      position: relative;
+      max-width: 720px;
+      margin: 0 auto;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column
+    }
+
+    header {
+      position: relative;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center
+    }
+
+    .brand {
+      position: absolute;
+      left: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      align-items: center;
+      gap: 8px
+    }
+
+    .brand img {
+      box-sizing: border-box;
+      width: 40%;
+      margin-top: 80px;
+    }
+
+    .brand .name {
+      font-weight: 700;
+      color: #214053;
+      font-size: 18px
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px
+    }
+
+    .stage {
+      position: relative;
+      width: min(76vw, 420px);
+      height: min(76vw, 420px)
+    }
+
+    .circle {
+      position: absolute;
+      inset: 0;
+      margin: auto;
+      width: 48%;
+      height: 48%;
+      border-radius: 9999px;
+      background: #fff;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, .12)
+    }
+
+    .wave {
+      position: absolute;
+      inset: 0;
+      margin: auto;
+      width: 60%;
+      height: 60%;
+      border-radius: 9999px;
+      background: radial-gradient(closest-side, rgba(163, 213, 231, .6), rgba(163, 213, 231, 0));
+      opacity: .6
+    }
+
+    .pulse {
+      animation: pulse 1.5s ease-in-out infinite
+    }
+
+    @keyframes pulse {
+      0% {
+        transform: scale(1);
+        opacity: .6
       }
 
-      /* 響應式設計優化 */
-      @media (orientation: landscape) and (max-height: 600px) {
-        .flex-col {
-          flex-direction: row;
-        }
-        #chat-container {
-          flex: 2;
-          margin-right: 1rem;
-        }
-        #visualizer-container {
-          flex: 1;
-          height: auto;
-          min-height: 100px;
-        }
-        footer {
-          position: fixed;
-          bottom: 0;
-          right: 0;
-          width: auto;
-          padding: 1rem;
-        }
+      70% {
+        transform: scale(1.18);
+        opacity: .15
       }
 
-      @media (max-width: 480px) {
-        .max-w-lg {
-          width: 90%;
-        }
+      100% {
+        transform: scale(1.32);
+        opacity: 0
       }
-    </style>
-  </head>
-  <body class="bg-bg-color text-text-color">
-    <div
-      class="flex flex-col h-screen max-w-lg mx-auto glass-container"
-      id="app"
-    >
-      <header class="flex items-center justify-between p-4 w-full">
-        <div class="flex items-center space-x-2">
-          <img src="logo demo3.png" alt="Logo" class="w-8 h-8 rounded-full" />
-          <span
-            class="text-xl font-bold text-transparent bg-clip-text bg-gradient-theme"
-            >AIChat</span
-          >
-        </div>
-        <button
-          class="p-2 rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-bg-color focus:ring-gray-500"
-          id="theme-toggle"
-        >
-          <span class="material-icons dark:hidden">dark_mode</span>
-          <span class="material-icons hidden dark:inline">light_mode</span>
-        </button>
-      </header>
-      <main class="flex-1 flex flex-col overflow-hidden">
-        <div
-          class="flex-1 overflow-y-auto p-4 space-y-2 w-full"
-          id="chat-container"
-        ></div>
-        <div
-          class="h-24 w-11/12 mx-auto flex items-center justify-center"
-          id="visualizer-container"
-        >
-          <canvas class="hidden w-full h-full" id="waveform"></canvas>
-          <div
-            class="hidden items-center space-x-2 text-sm text-gray-500 dark:text-gray-400"
-            id="loading-indicator"
-          >
-            <div class="dot-flashing"></div>
-            <span>語音辨識中…</span>
-          </div>
-        </div>
-      </main>
-      <footer class="p-4 w-full">
-        <div class="flex flex-col items-center justify-center space-y-2">
-          <button
-            class="relative w-20 h-20 rounded-full record-button flex items-center justify-center text-white shadow-lg"
-            id="record-button"
-          >
-            <span class="material-icons text-4xl" id="button-icon">mic</span>
-          </button>
-          <p
-            class="text-sm text-gray-500 dark:text-gray-400"
-            id="record-text"
-            style="font-size: 14px"
-          >
-            按住說話
-          </p>
-        </div>
-      </footer>
-    </div>
-    <script>
-      const themeToggle = document.getElementById("theme-toggle");
-      const html = document.documentElement;
-      themeToggle.addEventListener("click", () => {
-        html.classList.toggle("dark");
-        html.classList.toggle("light");
-        updateWaveformColor();
-      });
-      // --- Mock Chat Logic ---
-      const recordButton = document.getElementById("record-button");
-      const recordText = document.getElementById("record-text");
-      const buttonIcon = document.getElementById("button-icon");
-      const chatContainer = document.getElementById("chat-container");
-      const waveformCanvas = document.getElementById("waveform");
-      const visualizerContainer = document.getElementById(
-        "visualizer-container"
-      );
-      const loadingIndicator = document.getElementById("loading-indicator");
-      let isRecording = false;
-      let isPlaying = false;
-      const createBubble = (text, side) => {
-        const bubble = document.createElement("div");
-        const wrapper = document.createElement("div");
-        wrapper.className = `flex ${
-          side === "user" ? "justify-end" : "justify-start"
-        }`;
-        bubble.textContent = text;
-        bubble.className = `chat-bubble max-w-[80%] rounded-xl p-3 glass-effect ${
-          side === "user"
-            ? "text-text-color text-right"
-            : "text-text-color text-left"
-        }`;
-        bubble.style.lineHeight = "1.4";
-        bubble.style.fontSize = side === "user" ? "16px" : "15px";
-        wrapper.appendChild(bubble);
-        chatContainer.appendChild(wrapper);
-        chatContainer.scrollTop = chatContainer.scrollHeight;
-        return bubble;
-      };
-      const typewriterEffect = (element, text, callback) => {
-        let i = 0;
-        element.textContent = "";
-        element.classList.add("typewriter-cursor");
-        function type() {
-          if (i < text.length) {
-            const chunkSize = Math.floor(Math.random() * 3) + 3; // 3-5 chars
-            element.textContent += text.substring(i, i + chunkSize);
-            i += chunkSize;
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-            setTimeout(type, 50);
-          } else {
-            element.classList.remove("typewriter-cursor");
-            if (callback) callback();
-          }
-        }
-        type();
-      };
-      // Real TTS Integration with AI Core
-      let currentAudio = null;
+    }
 
-      const processVoiceChat = async (audioBlob) => {
+    .overlay {
+      position: absolute;
+      left: 50%;
+      top: -18%;
+      transform: translateX(-50%);
+      max-width: 92%;
+      padding: .6rem .9rem;
+      /* border-radius: 14px; */
+      /* background: rgba(34, 55, 74, .22); */
+      backdrop-filter: blur(8px);
+      color: #ABB1E5;
+      font-size: 24px;
+      font-weight: 600;
+      line-height: 1.5;
+      text-align: center
+    }
+
+    .dots {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center
+    }
+
+    .dots span {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #fff;
+      opacity: .85;
+      animation: dot 1.2s infinite
+    }
+
+    .dots span:nth-child(2) {
+      animation-delay: .2s
+    }
+
+    .dots span:nth-child(3) {
+      animation-delay: .4s
+    }
+
+    @keyframes dot {
+
+      0%,
+      100% {
+        transform: translateY(0);
+        opacity: .45
+      }
+
+      50% {
+        transform: translateY(-4px);
+        opacity: 1
+      }
+    }
+
+    .cursor::after {
+      content: "▋";
+      animation: blink 1s step-end infinite
+    }
+
+    @keyframes blink {
+
+      0%,
+      100% {
+        opacity: 1
+      }
+
+      50% {
+        opacity: 0
+      }
+    }
+
+    /* Raise the control area like ChatGPT voice UI */
+    footer {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 120px;
+      padding: 0 16px
+    }
+
+    .controls {
+      max-width: 720px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px
+    }
+
+    .btn {
+      position: relative;
+      width: min(22vw, 92px);
+      height: min(22vw, 92px);
+      border-radius: 9999px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, .35);
+      background: linear-gradient(145deg, rgba(125, 226, 255, .65), rgba(74, 196, 250, .45));
+      box-shadow: 0 10px 30px rgba(92, 214, 254, .35), inset 0 1px 10px rgba(255, 255, 255, .45);
+      backdrop-filter: blur(12px);
+      cursor: pointer;
+      transition: transform .18s ease, box-shadow .18s ease
+    }
+
+    .btn:active {
+      transform: scale(.96);
+      box-shadow: 0 6px 20px rgba(92, 214, 254, .5), inset 0 1px 8px rgba(255, 255, 255, .55)
+    }
+
+    .label {
+      font-size: 18px;
+      color: var(--label);
+      font-weight: 600
+    }
+
+    /* idle arrows */
+    .arrow {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #fff;
+      opacity: .6;
+      animation: hint 1.2s ease-in-out infinite
+    }
+
+    .arrow.left {
+      left: -42px
+    }
+
+    .arrow.right {
+      right: -42px;
+      animation-delay: .6s
+    }
+
+    @keyframes hint {
+
+      0%,
+      100% {
+        opacity: .2;
+        transform: translateY(-50%) translateX(0)
+      }
+
+      50% {
+        opacity: .9;
+        transform: translateY(-50%) translateX(6px)
+      }
+    }
+
+    /* accessibility: larger base sizes */
+    @media (min-width: 480px) {
+      .overlay {
+        font-size: 19px
+      }
+
+      .label {
+        font-size: 19px
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="bg-glass-overlay"></div>
+  <div id="root" class="container"></div>
+
+  <script src="https://unpkg.com/preact@10.20.2/dist/preact.umd.js"></script>
+  <script src="https://unpkg.com/preact@10.20.2/hooks/dist/hooks.umd.js"></script>
+  <script src="https://unpkg.com/htm@3.1.1/dist/htm.umd.js"></script>
+  <script>
+    const { h, render } = preact; const { useState, useRef } = preactHooks; const html = htm.bind(h)
+
+    function Dots() { return html`<span class="dots"><span></span><span></span><span></span></span>` }
+
+    function useAudioUnlock() {
+      const unlockedRef = useRef(false)
+      const unlock = () => {
+        if (unlockedRef.current) return
+        try { const AC = window.AudioContext || window.webkitAudioContext; const ctx = new AC(); const o = ctx.createOscillator(); const g = ctx.createGain(); g.gain.value = 0; o.connect(g); g.connect(ctx.destination); o.start(0); o.stop(0); unlockedRef.current = true; setTimeout(() => ctx.close(), 0) } catch (e) { }
+      }
+      return { unlock }
+    }
+
+    function App() {
+      const [overlay, setOverlay] = useState('')
+      const [processing, setProcessing] = useState(false)
+      const [speaking, setSpeaking] = useState(false)
+      const mediaRef = useRef({ mediaRecorder: null, chunks: [], stream: null, audio: null })
+      const { unlock } = useAudioUnlock()
+      const PLACEHOLDER = '今天想跟艾莉分享什麼呢？'
+
+      function showLoading() { setOverlay(html`<${Dots}/>`) }
+      function typeText(text) {
+        let i = 0; setOverlay('');
+        (function step() {
+          setOverlay(prev => `${typeof prev === 'string' ? prev : ''}${text.slice(i, i += Math.max(2, Math.floor(Math.random() * 4)))}`)
+          if (i < text.length) setTimeout(step, 35)
+        })()
+      }
+
+      async function safePlay(url) {
+        const ref = mediaRef.current
         try {
-          // 使用完整的語音聊天API
-          const formData = new FormData();
-          formData.append("audio", audioBlob, "voice.wav");
-          formData.append("patient_id", "demo_user");
-          formData.append(
-            "conversation_id",
-            currentConversationId || generateConversationId()
-          );
-
-          const chatResponse = await fetch("/api/v1/voice/chat", {
-            method: "POST",
-            body: formData,
-          });
-
-          if (!chatResponse.ok) throw new Error("Voice chat failed");
-          const chatData = await chatResponse.json();
-
-          // Show user message
-          createBubble(chatData.user_transcription, "user");
-
-          // Show AI response with typewriter effect and play audio
-          const aiBubble = createBubble("", "ai");
-          isPlaying = true;
-          buttonIcon.textContent = "pause";
-          recordButton.disabled = false;
-
-          typewriterEffect(aiBubble, chatData.ai_response_text, async () => {
-            // Play TTS audio if available
-            if (chatData.ai_audio_url) {
-              try {
-                currentAudio = new Audio(chatData.ai_audio_url);
-                currentAudio.onended = () => {
-                  isPlaying = false;
-                  buttonIcon.textContent = "mic";
-                  currentAudio = null;
-                };
-                await currentAudio.play();
-              } catch (audioError) {
-                console.warn("Audio playback failed:", audioError);
-                isPlaying = false;
-                buttonIcon.textContent = "mic";
-              }
-            } else {
-              // No audio available, just end the playing state
-              isPlaying = false;
-              buttonIcon.textContent = "mic";
-            }
-          });
-
-          // Update conversation ID
-          currentConversationId = chatData.conversation_id;
-        } catch (error) {
-          console.error("Voice chat error:", error);
-          createBubble("抱歉，處理語音時發生錯誤。請重試。", "ai");
-          isPlaying = false;
-          buttonIcon.textContent = "mic";
-        }
-      };
-
-      const mockAIResponse = () => {
-        // Fallback for demo purposes
-        setTimeout(() => {
-          const aiBubble = createBubble("", "ai");
-          const responseText =
-            "好的，這是一個使用 Tailwind CSS 和原生 JavaScript 實現的 AI 語音聊天介面。它包含了您所要求的所有功能，例如淺色與深色模式、漸層主題色、卡片式對話氣泡、以及動態音波視覺化。";
-          isPlaying = true;
-          buttonIcon.textContent = "pause";
-          recordButton.disabled = false;
-          typewriterEffect(aiBubble, responseText, () => {
-            isPlaying = false;
-            buttonIcon.textContent = "mic";
-          });
-        }, 1000);
-      };
-      // --- Audio Recording Logic ---
-      let mediaRecorder = null;
-      let recordedChunks = [];
-      let stream = null;
-      let currentConversationId = null;
-
-      // Helper function to generate conversation ID
-      const generateConversationId = () => {
-        return (
-          "conv_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9)
-        );
-      };
-
-      // --- Waveform Canvas Logic ---
-      const canvasCtx = waveformCanvas.getContext("2d");
-      let audioContext;
-      let analyser;
-      let animationFrameId;
-      function updateWaveformColor() {
-        if (html.classList.contains("dark")) {
-          canvasCtx.strokeStyle = "#6A83F0";
-          canvasCtx.shadowColor = "#6A83F0";
-          canvasCtx.shadowBlur = 3;
-        } else {
-          canvasCtx.strokeStyle = "#94F4E0";
-          canvasCtx.shadowColor = "#94F4E0";
-          canvasCtx.shadowBlur = 3;
-        }
-      }
-      async function startRecording() {
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({
-            audio: true,
-          });
-
-          // Setup audio recording
-          recordedChunks = [];
-          mediaRecorder = new MediaRecorder(stream);
-
-          mediaRecorder.ondataavailable = (event) => {
-            if (event.data.size > 0) {
-              recordedChunks.push(event.data);
-            }
-          };
-
-          mediaRecorder.onstop = async () => {
-            const audioBlob = new Blob(recordedChunks, { type: "audio/wav" });
-            // Process with real TTS pipeline
-            loadingIndicator.classList.remove("hidden");
-            loadingIndicator.classList.add("flex");
-
-            try {
-              await processVoiceChat(audioBlob);
-            } catch (error) {
-              console.error("Voice processing failed:", error);
-              // Fallback to mock response
-              mockAIResponse();
-            } finally {
-              loadingIndicator.classList.add("hidden");
-              loadingIndicator.classList.remove("flex");
-              recordText.textContent = "按住說話";
-              recordButton.disabled = false;
-            }
-          };
-
-          mediaRecorder.start();
-
-          // Setup waveform visualization
-          audioContext = new (window.AudioContext ||
-            window.webkitAudioContext)();
-          analyser = audioContext.createAnalyser();
-          const source = audioContext.createMediaStreamSource(stream);
-          source.connect(analyser);
-          analyser.fftSize = 256;
-          const bufferLength = analyser.frequencyBinCount;
-          const dataArray = new Uint8Array(bufferLength);
-          waveformCanvas.classList.remove("hidden");
-          updateWaveformColor();
-          canvasCtx.lineWidth = 3;
-
-          function draw() {
-            if (!isRecording) return;
-            animationFrameId = requestAnimationFrame(draw);
-            analyser.getByteTimeDomainData(dataArray);
-            canvasCtx.clearRect(
-              0,
-              0,
-              waveformCanvas.width,
-              waveformCanvas.height
-            );
-            canvasCtx.beginPath();
-            const sliceWidth = (waveformCanvas.width * 1.0) / bufferLength;
-            let x = 0;
-            for (let i = 0; i < bufferLength; i++) {
-              const v = dataArray[i] / 128.0;
-              const y = (v * waveformCanvas.height) / 2;
-              if (i === 0) {
-                canvasCtx.moveTo(x, y);
-              } else {
-                canvasCtx.lineTo(x, y);
-              }
-              x += sliceWidth;
-            }
-            canvasCtx.lineTo(waveformCanvas.width, waveformCanvas.height / 2);
-            canvasCtx.stroke();
-          }
-          draw();
+          if (ref.audio) { ref.audio.pause(); ref.audio = null }
+          ref.audio = new Audio(url); ref.audio.setAttribute('playsinline', '')
+          ref.audio.onended = () => setSpeaking(false)
+          await ref.audio.play()
         } catch (err) {
-          console.error("麥克風權限被拒絕:", err);
-          alert("請允許麥克風權限以使用語音功能。");
+          setOverlay('點一下播放')
+          const box = document.getElementById('overlay-box')
+          const handler = async () => { try { await ref.audio.play(); setOverlay(''); box.removeEventListener('click', handler) } catch (e) { } }
+          box.addEventListener('click', handler)
         }
       }
-      function stopRecording() {
-        if (mediaRecorder && mediaRecorder.state === "recording") {
-          mediaRecorder.stop();
-        }
 
-        if (stream) {
-          stream.getTracks().forEach((track) => track.stop());
-          stream = null;
-        }
-
-        if (animationFrameId) {
-          cancelAnimationFrame(animationFrameId);
-          animationFrameId = null;
-        }
-
-        if (audioContext && audioContext.state !== "closed") {
-          audioContext.close();
-        }
-
-        waveformCanvas.classList.add("hidden");
-      }
-      // --- Record Button Interaction ---
-      recordButton.addEventListener("mousedown", (e) => {
-        if (isPlaying) return;
-        isRecording = true;
-        recordText.textContent = "放開結束";
-        // Ripple effect
-        const ripple = document.createElement("span");
-        ripple.classList.add("ripple");
-        recordButton.appendChild(ripple);
-        setTimeout(() => ripple.remove(), 600);
-        // Start recording
-        startRecording();
-      });
-      recordButton.addEventListener("mouseup", () => {
-        if (!isRecording) return;
-        isRecording = false;
-        recordText.textContent = "";
-        recordButton.disabled = true; // Disable until AI responds
-        stopRecording();
-        // Note: Loading and response handling is now in stopRecording's mediaRecorder.onstop
-      });
-      recordButton.addEventListener("mouseleave", () => {
-        if (isRecording) {
-          recordButton.dispatchEvent(new MouseEvent("mouseup"));
-        }
-      });
-      // For touch devices
-      recordButton.addEventListener("touchstart", (e) => {
-        e.preventDefault();
-        recordButton.dispatchEvent(new MouseEvent("mousedown"));
-      });
-      recordButton.addEventListener("touchend", (e) => {
-        e.preventDefault();
-        recordButton.dispatchEvent(new MouseEvent("mouseup"));
-      });
-      // Play/Pause toggle for TTS audio
-      recordButton.addEventListener("click", () => {
-        if (!isPlaying && buttonIcon.textContent !== "mic") {
-          // If AI is done but button is stuck on pause
-          buttonIcon.textContent = "mic";
-        }
-        if (isPlaying && currentAudio) {
-          if (currentAudio.paused) {
-            currentAudio.play();
-            buttonIcon.textContent = "pause";
-          } else {
-            currentAudio.pause();
-            buttonIcon.textContent = "play_arrow";
+      async function start() {
+        if (speaking) return
+        unlock();
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+          const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : undefined
+          const mr = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined)
+          mediaRef.current = { mediaRecorder: mr, chunks: [], stream, audio: null }
+          setProcessing(false); showLoading(); // show dots when starting
+          mr.ondataavailable = e => { if (e.data.size > 0) mediaRef.current.chunks.push(e.data) }
+          mr.onstop = async () => {
+            setProcessing(true); setOverlay(html`<${Dots}/>`); const type = mime || 'audio/wav'; const blob = new Blob(mediaRef.current.chunks, { type })
+            try {
+              const fd = new FormData(); fd.append('audio', blob, 'voice.webm'); fd.append('patient_id', 'demo_user')
+              const res = await fetch('/api/v1/voice/chat', { method: 'POST', body: fd })
+              if (!res.ok) throw new Error('voice chat failed')
+              const data = await res.json(); setProcessing(false)
+              if (data.ai_response_text) { typeText(data.ai_response_text) }
+              if (data.ai_audio_url) { setSpeaking(true); await safePlay(data.ai_audio_url) }
+            } catch (err) { setProcessing(false); setOverlay('處理失敗，請重試') }
+            // cleanup
+            mediaRef.current.stream?.getTracks().forEach(t => t.stop())
           }
-        }
-      });
-      // Initial setup
-      if (
-        window.matchMedia &&
-        window.matchMedia("(prefers-color-scheme: dark)").matches
-      ) {
-        html.classList.add("dark");
-      } else {
-        html.classList.add("light");
+          mr.start();
+          mediaRef.current.mediaRecorder = mr
+        } catch (e) { alert('請允許麥克風權限以使用語音功能。') }
       }
-      // Initial welcome message
-      setTimeout(() => {
-        const aiBubble = createBubble("", "ai");
-        typewriterEffect(
-          aiBubble,
-          "您好！我是您的 AI 助理，請按住下方的麥克風按鈕開始對話。"
-        );
-      }, 500);
-    </script>
-  </body>
+
+      function stop() { const { mediaRecorder } = mediaRef.current; if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop() }
+
+      return html`
+          <header>
+            <div class="brand"><img src="logo demo3.png" alt="RespiraAlly" /><span class="name"></span></div>
+          </header>
+          <main>
+            <div class="stage">
+              <div class=${`wave ${processing || speaking ? 'pulse' : ''}`}></div>
+              <div class="circle"></div>
+              <div id="overlay-box" class="overlay">${processing ? html`<${Dots}/>` : (overlay || PLACEHOLDER)}</div>
+            </div>
+          </main>
+          <footer>
+            <div class="controls" style="position:relative;display:flex;align-items:center;justify-content:center;">
+              <span class="material-icons arrow left">chevron_right</span>
+              <button class="btn" onMouseDown=${start} onMouseUp=${stop} onTouchStart=${(e) => { e.preventDefault(); start() }} onTouchEnd=${(e) => { e.preventDefault(); stop() }} aria-label="按住說話">
+                <span class="material-icons" style="font-size:38px">mic</span>
+              </button>
+              <span class="material-icons arrow right">chevron_left</span>
+            </div>
+            <div class="controls"><div class="label">按住說話</div></div>
+          </footer>
+        `
+    }
+
+    render(h(App, {}), document.getElementById('root'))
+  </script>
+</body>
+
 </html>

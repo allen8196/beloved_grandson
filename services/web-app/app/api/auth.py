@@ -302,3 +302,23 @@ def serve_mmrc_form_page():
     """提供 MMRC 問卷靜態頁面"""
     from flask import current_app, send_from_directory
     return send_from_directory(current_app.static_folder, 'mmrc_form.html')
+
+
+@auth_bp.route('/voice_chat', methods=['GET'])
+@swag_from({
+    'summary': '提供即時語音對談頁面',
+    'description': '提供即時語音回覆（Radio Wave + Overlay）之 LIFF/瀏覽器頁面，供使用者錄音並獲取 AI 語音回覆。',
+    'tags': ['LIFF', 'Voice'],
+    'responses': {
+        '200': {
+            'description': '成功回傳 Voice Chat HTML 頁面',
+            'content': {
+                'text/html': {}
+            }
+        }
+    }
+})
+def serve_voice_chat_page():
+    """提供 Voice Chat 靜態頁面"""
+    from flask import current_app, send_from_directory
+    return send_from_directory(current_app.static_folder, 'voice_chat.html')

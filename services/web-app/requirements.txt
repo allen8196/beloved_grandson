@@ -21,3 +21,4 @@ gevent-websocket==0.10.1
 line-bot-sdk==3.17.1
 mutagen==1.47.0
 apscheduler==3.10.4
+Flask-APScheduler==1.13.1

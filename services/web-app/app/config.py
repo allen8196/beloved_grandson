@@ -44,6 +44,16 @@ class Config:
     LINE_RICH_MENU_ID_GUEST = os.getenv('LINE_RICH_MENU_ID_GUEST')
     LINE_RICH_MENU_ID_MEMBER = os.getenv('LINE_RICH_MENU_ID_MEMBER')
 
+    # APScheduler 設定
+    SCHEDULER_JOBSTORES = {
+        'default': {
+            'type': 'sqlalchemy',
+            'url': os.getenv('DATABASE_URL')
+        }
+    }
+    SCHEDULER_API_ENABLED = True
+    SCHEDULER_MISFIRE_GRACE_TIME = 30
+
     BASE_URL = os.getenv('BASE_URL')
 
 class DevelopmentConfig(Config):
