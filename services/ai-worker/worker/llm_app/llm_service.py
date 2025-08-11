@@ -11,7 +11,7 @@ class LLMService:
         genai.configure(api_key=os.environ.get("GOOGLE_API_KEY", ""))
         model = genai.GenerativeModel('gemini-2.5-flash')
 
-        print(f"提示詞：{task_data["text"]}")
+        print(f"提示詞：{task_data['text']}")
         try:
             response = model.generate_content(task_data["text"])
 
