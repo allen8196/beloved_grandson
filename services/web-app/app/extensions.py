@@ -9,6 +9,7 @@ from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
 from flasgger import Swagger
 from flask_socketio import SocketIO
+from flask_apscheduler import APScheduler
 from pymongo import MongoClient
 import os
 
@@ -17,6 +18,7 @@ migrate = Migrate()
 jwt = JWTManager()
 swagger = Swagger()
 socketio = SocketIO()
+scheduler = APScheduler()
 
 # MongoDB Client
 mongo_client = None
@@ -27,9 +29,9 @@ def init_mongo():
     mongo_uri = os.getenv("MONGO_URL")
     if not mongo_uri:
         raise ValueError("MONGO_URL environment variable is not set.")
-    
+
     mongo_client = MongoClient(mongo_uri)
-    
+
     try:
         mongo_client.admin.command('ping')
         print("MongoDB connection successful.")
