@@ -1,8 +1,8 @@
 # services/web-app/app/app.py
-
+import os
 from flask import Flask, jsonify
 from .config import config
-from .extensions import db, migrate, swagger, jwt, socketio, init_mongo
+from .extensions import db, migrate, swagger, jwt, socketio, init_mongo, scheduler
 from .api.auth import auth_bp
 from .api.patients import patients_bp
 from .api.questionnaires import questionnaires_bp
@@ -12,6 +12,7 @@ from .api.daily_metrics import daily_metrics_bp
 from .api.chat import bp as chat_bp # Explicitly import and alias the blueprint
 from .api.voice import bp as voice_bp # Import voice API blueprint
 from .core.notification_service import start_notification_listener
+from .core.scheduler_service import scheduled_task
 
 def create_app(config_name='default'):
     """
@@ -27,6 +28,12 @@ def create_app(config_name='default'):
     migrate.init_app(app, db)
     swagger.init_app(app)
     jwt.init_app(app)
+
+    # 初始化排程器
+    # We do this check to prevent the scheduler from starting during tests
+    if config_name != 'testing':
+        scheduler.init_app(app)
+        scheduler.start()
 
     init_mongo()
 
@@ -69,5 +76,20 @@ def create_app(config_name='default'):
     # We do this check to prevent the listener from starting during tests
     if config_name != 'testing':
         start_notification_listener(app)
+
+        # 在應用程式上下文中新增排程任務
+        with app.app_context():
+            # 確保只在主程序中新增任務，避免開發伺服器重載時重複新增
+            # 在生產環境 (如 Gunicorn) 中，這個環境變數不存在，但 get_job() 會確保任務唯一性
+            if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+                # 檢查任務是否已存在，若不存在才新增
+                if not scheduler.get_job('scheduled_task_id'):
+                    scheduler.add_job(
+                        id='scheduled_task_id',
+                        func=scheduled_task,
+                        trigger='interval',
+                        minutes=1,
+                        replace_existing=True
+                    )
 
     return app, socketio
