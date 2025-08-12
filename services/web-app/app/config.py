@@ -52,7 +52,12 @@ class Config:
         "default": {"type": "sqlalchemy", "url": os.getenv("DATABASE_URL")}
     }
     SCHEDULER_API_ENABLED = True
-    SCHEDULER_MISFIRE_GRACE_TIME = 30
+    # 使用 job defaults 以正確套用 misfire 與 coalesce 設定
+    SCHEDULER_JOB_DEFAULTS = {
+        "coalesce": True,
+        "misfire_grace_time": 60,
+        "max_instances": 1,
+    }
     SCHEDULER_TIMEZONE = "Asia/Taipei"
 
     BASE_URL = os.getenv("BASE_URL")

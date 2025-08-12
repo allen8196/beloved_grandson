@@ -37,9 +37,9 @@ def create_app(config_name="default"):
     swagger.init_app(app)
     jwt.init_app(app)
 
-    # 初始化排程器
-    # We do this check to prevent the scheduler from starting during tests
-    if config_name != "testing":
+    # 初始化排程器（允許在排程執行緒或子流程中跳過，以避免重複啟動）
+    # 以環境變數 SKIP_SCHEDULER_INIT=1 控制略過
+    if config_name != "testing" and os.getenv("SKIP_SCHEDULER_INIT") != "1":
         scheduler.init_app(app)
         scheduler.start()
 
@@ -129,16 +129,20 @@ def create_app(config_name="default"):
                         hour=hour,
                         minute=minute,
                         replace_existing=True,
+                        misfire_grace_time=60,
+                        max_instances=1,
+                        coalesce=True,
                     )
 
-                # 讀取三個任務時間（預設：12:30、17:30、20:00）
+                # 讀取三個任務時間（預設：12:30、17:30、20:00 台北時區）
                 noon_h, noon_m = get_time("NOON_CARE_HOUR", "NOON_CARE_MINUTE", 12, 30)
                 survey_h, survey_m = get_time(
                     "SURVEY_REMINDER_HOUR", "SURVEY_REMINDER_MINUTE", 17, 30
                 )
                 evening_h, evening_m = get_time(
-                    "EVENING_SUMMARY_HOUR", "EVENING_SUMMARY_MINUTE", 20, 0
+                    "EVENING_SUMMARY_HOUR", "EVENING_SUMMARY_MINUTE", 20, 00
                 )
+
 
                 # 設定或重排程
                 add_or_reschedule(

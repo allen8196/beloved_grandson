@@ -11,13 +11,11 @@ WORKDIR /usr/src/app
 
 COPY . .
 
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt \
+    && sed -i 's/\r$//' entrypoint.sh \
+    && chmod +x entrypoint.sh
 
 EXPOSE 5000
 
-ENTRYPOINT ["/usr/src/app/entrypoint.sh"]
-
-# CMD 提供容器的預設啟動命令。
-# 這個命令會被 docker-compose.yml 中的 'command' 指令覆蓋。
-# 我們將其設定為生產環境的啟動命令作為一個合理的預設值。
+# 在開發環境中，啟動命令由 docker-compose.dev.yml 的 command 覆蓋
 CMD ["gunicorn", "--worker-class", "gevent", "--workers", "1", "--bind", "0.0.0.0:5000", "wsgi:app"]
