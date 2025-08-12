@@ -60,7 +60,7 @@ services:
       - ETCD_SNAPSHOT_COUNT=50000
     volumes:
       - dev_etcd:/etcd
-    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    command: etcd -advertise-client-urls=http://etcd:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
 
   minio:
     container_name: dev_milvus-minio
@@ -95,6 +95,11 @@ services:
     ports:
       - "19530:19530"
       - "9091:9091"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9091/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   mongodb:
     image: mongo:latest
@@ -172,13 +177,21 @@ services:
       - RABBITMQ_NOTIFICATION_QUEUE=notifications_queue
       - MINIO_BUCKET_NAME=audio-bucket
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - MILVUS_URI=http://milvus:19530
 
     depends_on:
-      - rabbitmq
-      - postgres
-      - redis
-      - mongodb
-      - minio
+      rabbitmq:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      milvus:
+        condition: service_healthy
 
   # -------------------------------------------------
   #  4. 邊緣網路層 (Edge Layer)
