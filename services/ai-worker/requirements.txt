@@ -14,3 +14,7 @@ pymilvus
 redis
 python-dotenv
 langchain-openai
+torch
+torchaudio
+transformers
+accelerate
