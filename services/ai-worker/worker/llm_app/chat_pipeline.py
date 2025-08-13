@@ -1,30 +1,38 @@
-import os
 import hashlib
+import os
 from typing import Optional
 
-from crewai import Crew, Task
+# 禁用 CrewAI 遙測功能（避免連接錯誤）
+os.environ["OTEL_SDK_DISABLED"] = "true"
+os.environ["CREWAI_TELEMETRY_OPT_OUT"] = "true"
 
-from .HealthBot.agent import (
-    create_guardrail_agent,
-    create_health_companion,
-    build_prompt_from_redis,
-)
-from .toolkits.redis_store import (
-    try_register_request,
-    make_request_id,
-    append_round,
-    peek_next_n,
-    read_and_clear_audio_segments,
-    get_audio_result,
-    set_audio_result,
-    set_state_if,
-    xadd_alert,
-    acquire_audio_lock,
-    release_audio_lock,
-)
-from .toolkits.tools import summarize_chunk_and_commit, SearchMilvusTool, ModelGuardrailTool
+from crewai import Crew, Task
 from openai import OpenAI
 
+from .HealthBot.agent import (
+    build_prompt_from_redis,
+    create_guardrail_agent,
+    create_health_companion,
+    finalize_session,
+)
+from .toolkits.redis_store import (
+    acquire_audio_lock,
+    append_round,
+    get_audio_result,
+    make_request_id,
+    peek_next_n,
+    read_and_clear_audio_segments,
+    release_audio_lock,
+    set_audio_result,
+    set_state_if,
+    try_register_request,
+    xadd_alert,
+)
+from .toolkits.tools import (
+    ModelGuardrailTool,
+    SearchMilvusTool,
+    summarize_chunk_and_commit,
+)
 
 SUMMARY_CHUNK_SIZE = int(os.getenv("SUMMARY_CHUNK_SIZE", 5))
 
@@ -59,14 +67,20 @@ def log_session(user_id: str, query: str, reply: str, request_id: Optional[str] 
         summarize_chunk_and_commit(user_id, start_round=start, history_chunk=chunk)
 
 
-def handle_user_message(agent_manager: AgentManager, user_id: str, query: str,
-                        audio_id: Optional[str] = None, is_final: bool = True) -> str:
+def handle_user_message(
+    agent_manager: AgentManager,
+    user_id: str,
+    query: str,
+    audio_id: Optional[str] = None,
+    is_final: bool = True,
+) -> str:
     # 0) 統一音檔 ID（沒帶就用文字 hash 當臨時 ID，向後相容）
     audio_id = audio_id or hashlib.sha1(query.encode("utf-8")).hexdigest()[:16]
 
     # 1) 非 final：不觸發任何 LLM/RAG/通報，只緩衝片段
     if not is_final:
         from .toolkits.redis_store import append_audio_segment  # 延遲載入避免循環
+
         append_audio_segment(user_id, audio_id, query)
         return "👌 已收到語音片段"
 
@@ -97,13 +111,20 @@ def handle_user_message(agent_manager: AgentManager, user_id: str, query: str,
                 expected_output="OK 或 BLOCK: <原因>",
                 agent=guard,
             )
-            guard_res = (Crew(agents=[guard], tasks=[guard_task], verbose=False).kickoff().raw or "").strip()
+            guard_res = (
+                Crew(agents=[guard], tasks=[guard_task], verbose=False).kickoff().raw
+                or ""
+            ).strip()
         except Exception:
             guard_res = ModelGuardrailTool()._run(full_text)
         if guard_res.startswith("BLOCK:"):
             reason = guard_res[6:].strip()
             if any(k in reason for k in ["自傷", "自殺", "傷害自己", "緊急"]):
-                xadd_alert(user_id=user_id, reason=f"可能自傷風險：{full_text}", severity="high")
+                xadd_alert(
+                    user_id=user_id,
+                    reason=f"可能自傷風險：{full_text}",
+                    severity="high",
+                )
             reply = "抱歉，這個問題涉及違規或需專業人士評估，我無法提供解答。"
             set_audio_result(user_id, audio_id, reply)
             log_session(user_id, full_text, reply)
@@ -121,7 +142,7 @@ def handle_user_message(agent_manager: AgentManager, user_id: str, query: str,
                 expected_output="台語風格的溫暖關懷回覆，必要時使用工具。",
                 agent=care,
             )
-            res = (Crew(agents=[care], tasks=[task], verbose=False).kickoff().raw or "")
+            res = Crew(agents=[care], tasks=[task], verbose=False).kickoff().raw or ""
         except Exception:
             ctx = build_prompt_from_redis(user_id, k=6, current_input=full_text)
             qa = SearchMilvusTool()._run(full_text)
@@ -151,3 +172,34 @@ def handle_user_message(agent_manager: AgentManager, user_id: str, query: str,
         release_audio_lock(lock_id)
 
 
+class UserSession:
+    """用戶會話管理類，負責閒置超時和會話結束處理"""
+
+    def __init__(self, user_id: str, agent_manager: AgentManager, timeout: int = 300):
+        import threading
+        import time
+
+        self.user_id = user_id
+        self.agent_manager = agent_manager
+        self.timeout = timeout
+        self.last_active_time = None
+        self.stop_event = threading.Event()
+        threading.Thread(target=self._watchdog, daemon=True).start()
+
+    def update_activity(self):
+        import time
+
+        self.last_active_time = time.time()
+
+    def _watchdog(self):
+        import time
+
+        while not self.stop_event.is_set():
+            time.sleep(5)
+            if self.last_active_time and (
+                time.time() - self.last_active_time > self.timeout
+            ):
+                print(f"\n⏳ 閒置超過 {self.timeout}s，開始收尾...")
+                finalize_session(self.user_id)
+                self.agent_manager.release_health_agent(self.user_id)
+                self.stop_event.set()

@@ -20,7 +20,7 @@ services:
       - "15432:5432"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_ADMIN_USER} -d ${POSTGRES_DB}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_ADMIN_USER} -d ${POSTGRES_DB}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -30,9 +30,11 @@ services:
     container_name: dev_redis_cache
     volumes:
       - dev_redisdata:/data
+    ports:
+      - "6379:6379"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -75,14 +77,14 @@ services:
       - dev_minio:/data
     command: minio server /data --console-address ":9001"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 30s
       timeout: 20s
       retries: 3
 
   milvus:
     image: milvusdb/milvus:v2.5.14
-    command: ["milvus", "run", "standalone"]
+    command: [ "milvus", "run", "standalone" ]
     container_name: dev_milvus_vector_db
     depends_on:
       - etcd
@@ -96,7 +98,7 @@ services:
       - "19530:19530"
       - "9091:9091"
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:9091/healthz"]
+      test: [ "CMD", "curl", "-sf", "http://localhost:9091/healthz" ]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -178,6 +180,9 @@ services:
       - MINIO_BUCKET_NAME=audio-bucket
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - MILVUS_URI=http://milvus:19530
+      # 禁用 CrewAI 遙測功能
+      - OTEL_SDK_DISABLED=true
+      - CREWAI_TELEMETRY_OPT_OUT=true
 
     depends_on:
       rabbitmq:
