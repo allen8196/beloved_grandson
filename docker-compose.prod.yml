@@ -28,7 +28,7 @@ services:
           memory: 256M
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_ADMIN_USER} -d ${POSTGRES_DB}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_ADMIN_USER} -d ${POSTGRES_DB}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -40,7 +40,7 @@ services:
       - redisdata:/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -80,7 +80,7 @@ services:
       - minio:/data
     command: minio server /data --console-address ":9001"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 30s
       timeout: 20s
       retries: 3
@@ -88,7 +88,7 @@ services:
 
   milvus:
     image: milvusdb/milvus:v2.5.14
-    command: ["milvus", "run", "standalone"]
+    command: [ "milvus", "run", "standalone" ]
     container_name: prod_milvus_vector_db
     depends_on:
       - etcd
@@ -154,6 +154,9 @@ services:
     container_name: prod_ai_worker_service
     env_file:
       - .env
+    volumes:
+      # 啟用 Hugging Face 模型快取，避免重複下載
+      - hf_cache:/root/.cache/huggingface
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_ADMIN_USER}:${POSTGRES_ADMIN_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - REDIS_URL=redis://redis:6379
@@ -170,6 +173,23 @@ services:
       - RABBITMQ_TTS_QUEUE=tts_request_queue
       - PYTHONUNBUFFERED=1
       - MINIO_BUCKET_NAME=audio-bucket
+      - VOICE_BUCKET=audio-uploads
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      # HF 模型快取位置（與上方卷一致）
+      - HF_HOME=/root/.cache/huggingface
+      - TRANSFORMERS_CACHE=/root/.cache/huggingface
+      # GPU 相關環境變數
+      - CUDA_VISIBLE_DEVICES=0
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    # 啟用 GPU 支援 (Docker Desktop 相容版本)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]
     depends_on:
       - rabbitmq
       - postgres
@@ -209,3 +229,4 @@ volumes:
   etcd:
   mongodb_data:
   rabbitmq_data:
+  hf_cache:

@@ -160,6 +160,8 @@ services:
     volumes:
       # 掛載本地程式碼，若有修改可重啟容器生效
       - ./services/ai-worker:/app
+      # 啟用 Hugging Face 模型快取，避免重複下載
+      - dev_hf_cache:/root/.cache/huggingface
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_ADMIN_USER}:${POSTGRES_ADMIN_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - REDIS_URL=redis://redis:6379
@@ -172,8 +174,23 @@ services:
       - RABBITMQ_QUEUE=task_queue
       - RABBITMQ_NOTIFICATION_QUEUE=notifications_queue
       - MINIO_BUCKET_NAME=audio-bucket
+      - VOICE_BUCKET=audio-uploads
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-
+      # HF 模型快取位置（與上方卷一致）
+      - HF_HOME=/root/.cache/huggingface
+      - TRANSFORMERS_CACHE=/root/.cache/huggingface
+      # GPU 相關環境變數
+      - CUDA_VISIBLE_DEVICES=0
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    # 啟用 GPU 支援 (Docker Desktop 相容版本)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]
     depends_on:
       - rabbitmq
       - postgres
@@ -216,3 +233,4 @@ volumes:
   dev_etcd:
   dev_mongodb_data:
   dev_rabbitmq_data:
+  dev_hf_cache:
