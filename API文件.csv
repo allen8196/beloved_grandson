@@ -1,0 +1,21 @@
+方法 (Method),端點 (Endpoint),摘要 (Summary),標籤 (Tags)
+POST,/api/v1/auth/line/login,處理 LINE 使用者登入,Authentication
+POST,/api/v1/auth/line/register,處理 LINE 使用者註冊,Authentication
+POST,/api/v1/auth/login,處理使用者登入,Authentication
+POST,/api/v1/chat/audio,Handles audio message submissions and triggers the processing pipeline.,chat
+POST,/api/v1/chat/text,Receives a text message and publishes it to the AI worker queue.,chat
+GET,/api/v1/conversations/{conversation_id}/messages,Retrieves all messages for a specific conversation.,chat
+GET,/api/v1/patients/{patient_id}/conversations,Retrieves a list of conversations for a specific patient.,chat
+GET,/api/v1/patients/{patient_id}/daily_metrics,獲取每日健康日誌 (Get daily health metrics),Health Data & Questionnaires
+POST,/api/v1/patients/{patient_id}/daily_metrics,新增每日健康日誌 (Add a new daily health metric),Health Data & Questionnaires
+PUT,/api/v1/patients/{patient_id}/daily_metrics/{log_date},更新指定日期的健康日誌 (Update a daily health metric),Health Data & Questionnaires
+GET,/api/v1/patients/{patient_id}/profile,獲取病患詳細健康檔案,Patients
+GET,/api/v1/patients/{patient_id}/questionnaires/cat,獲取 CAT 問卷歷史記錄 (Get CAT History),Health Data & Questionnaires
+POST,/api/v1/patients/{patient_id}/questionnaires/cat,提交 CAT 問卷 (Submit CAT Questionnaire),Health Data & Questionnaires
+PUT,/api/v1/patients/{patient_id}/questionnaires/cat/{year}/{month},更新指定月份的 CAT 問卷 (Update CAT Questionnaire for a specific month),Health Data & Questionnaires
+GET,/api/v1/patients/{patient_id}/questionnaires/mmrc,獲取 MMRC 問卷歷史記錄 (Get MMRC History),Health Data & Questionnaires
+POST,/api/v1/patients/{patient_id}/questionnaires/mmrc,提交 MMRC 問卷 (Submit MMRC Questionnaire),Health Data & Questionnaires
+PUT,/api/v1/patients/{patient_id}/questionnaires/mmrc/{year}/{month},更新指定月份的 MMRC 問卷 (Update MMRC Questionnaire for a specific month),Health Data & Questionnaires
+GET,/api/v1/therapist/patients,獲取治療師的病患列表,Patients
+POST,/api/v1/users/,建立新使用者 (管理員專用),Users
+POST,/audio/request-url,請求音檔上傳 URL,Uploads
