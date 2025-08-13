@@ -1,11 +1,12 @@
+import logging
 import os
 import uuid
-from flask import Blueprint, request, jsonify, current_app
+
+import requests
+from app.core.minio_service import get_minio_service
+from flask import Blueprint, current_app, jsonify, request
 from werkzeug.exceptions import BadRequest
 from werkzeug.utils import secure_filename
-from app.core.minio_service import get_minio_service
-import requests
-import logging
 
 bp = Blueprint('voice', __name__, url_prefix='/api/v1/voice')
 
@@ -85,8 +86,8 @@ def transcribe_audio():
         
         # 上傳到MinIO
         minio_service = get_minio_service()
-        bucket_name = current_app.config.get('VOICE_BUCKET', 'voice-bucket')
-        
+        bucket_name = current_app.config.get('VOICE_BUCKET', 'audio-uploads')
+
         # 確保bucket存在
         # 上傳文件（MinIO服務會自動檢查和創建bucket）
         file_data = file.read()
@@ -241,7 +242,7 @@ def synthesize_speech():
             duration_ms = len(text) * 100
         
         # 生成音頻文件的訪問URL
-        bucket_name = current_app.config.get('TTS_BUCKET', 'audio-bucket')
+        bucket_name = current_app.config.get('MINIO_BUCKET_NAME', 'audio-bucket')
         minio_service = get_minio_service()
         
         # 生成預簽名URL（有效期1小時）
@@ -339,8 +340,8 @@ def voice_chat():
         object_name = f"voice_chat/{file_id}_{filename}"
         
         minio_service = get_minio_service()
-        bucket_name = current_app.config.get('VOICE_BUCKET', 'voice-bucket')
-        
+        bucket_name = current_app.config.get('MINIO_BUCKET_NAME', 'audio-bucket')
+
         file_data = file.read()
         minio_service.upload_file_content(
             bucket_name=bucket_name,
@@ -381,8 +382,8 @@ def voice_chat():
                 'duration_ms': 3000
             }
         
-        # 生成AI語音的訪問URL（預簽名 GET），回傳給前端直接播放
-        tts_bucket = current_app.config.get('TTS_BUCKET', 'audio-bucket')
+        # 生成AI語音的訪問URL
+        tts_bucket = current_app.config.get('MINIO_BUCKET_NAME', 'audio-bucket')
         ai_audio_object = chat_data.get('ai_audio_object')
         
         if ai_audio_object:

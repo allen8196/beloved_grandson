@@ -20,7 +20,7 @@ services:
       - "15432:5432"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_ADMIN_USER} -d ${POSTGRES_DB}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_ADMIN_USER} -d ${POSTGRES_DB}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -30,9 +30,11 @@ services:
     container_name: dev_redis_cache
     volumes:
       - dev_redisdata:/data
+    ports:
+      - "6379:6379"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -60,7 +62,7 @@ services:
       - ETCD_SNAPSHOT_COUNT=50000
     volumes:
       - dev_etcd:/etcd
-    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    command: etcd -advertise-client-urls=http://etcd:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
 
   minio:
     container_name: dev_milvus-minio
@@ -75,14 +77,14 @@ services:
       - dev_minio:/data
     command: minio server /data --console-address ":9001"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 30s
       timeout: 20s
       retries: 3
 
   milvus:
     image: milvusdb/milvus:v2.5.14
-    command: ["milvus", "run", "standalone"]
+    command: [ "milvus", "run", "standalone" ]
     container_name: dev_milvus_vector_db
     depends_on:
       - etcd
@@ -95,6 +97,11 @@ services:
     ports:
       - "19530:19530"
       - "9091:9091"
+    healthcheck:
+      test: [ "CMD", "curl", "-sf", "http://localhost:9091/healthz" ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   mongodb:
     image: mongo:latest
@@ -122,6 +129,8 @@ services:
       context: ./services/web-app
       dockerfile: Dockerfile
     container_name: dev_web_app_service
+    entrypoint: >
+      sh -lc "flask db upgrade && flask run --host=0.0.0.0 --port=5000 --debug"
     ports:
       - "5000:5000"
     env_file:
@@ -129,7 +138,6 @@ services:
     volumes:
       # 掛載本地程式碼到容器中，實現熱重載
       - ./services/web-app:/usr/src/app
-    command: flask run --host=0.0.0.0 --port=5000 --debug
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_ADMIN_USER}:${POSTGRES_ADMIN_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - REDIS_URL=redis://redis:6379
@@ -159,6 +167,8 @@ services:
     volumes:
       # 掛載本地程式碼，若有修改可重啟容器生效
       - ./services/ai-worker:/app
+      # 啟用 Hugging Face 模型快取，避免重複下載
+      - dev_hf_cache:/root/.cache/huggingface
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_ADMIN_USER}:${POSTGRES_ADMIN_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - REDIS_URL=redis://redis:6379
@@ -171,14 +181,41 @@ services:
       - RABBITMQ_QUEUE=task_queue
       - RABBITMQ_NOTIFICATION_QUEUE=notifications_queue
       - MINIO_BUCKET_NAME=audio-bucket
+      - VOICE_BUCKET=audio-uploads
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - MILVUS_URI=http://milvus:19530
+      # 禁用 CrewAI 遙測功能
+      - OTEL_SDK_DISABLED=true
+      - CREWAI_TELEMETRY_OPT_OUT=true
 
+      # HF 模型快取位置（與上方卷一致）
+      - HF_HOME=/root/.cache/huggingface
+      - TRANSFORMERS_CACHE=/root/.cache/huggingface
+      # GPU 相關環境變數
+      - CUDA_VISIBLE_DEVICES=0
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    # 啟用 GPU 支援 (Docker Desktop 相容版本)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]
     depends_on:
-      - rabbitmq
-      - postgres
-      - redis
-      - mongodb
-      - minio
+      rabbitmq:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      milvus:
+        condition: service_healthy
 
   # -------------------------------------------------
   #  4. 邊緣網路層 (Edge Layer)
@@ -215,3 +252,4 @@ volumes:
   dev_etcd:
   dev_mongodb_data:
   dev_rabbitmq_data:
+  dev_hf_cache:
