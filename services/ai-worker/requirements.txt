@@ -7,6 +7,13 @@ pymongo==4.8.0
 mutagen==1.47.0
 minio
 google-generativeai
+crewai
+crewai-tools
+openai
+pymilvus
+redis
+python-dotenv
+langchain-openai
 torch
 torchaudio
 transformers
