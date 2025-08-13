@@ -7,3 +7,7 @@ pymongo==4.8.0
 mutagen==1.47.0
 minio
 google-generativeai
+torch
+torchaudio
+transformers
+accelerate

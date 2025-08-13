@@ -1,6 +1,10 @@
-# services/ai-worker/Dockerfile
-FROM python:3.10-slim
+FROM pytorch/pytorch:2.3.1-cuda12.1-cudnn8-runtime
 WORKDIR /app
 COPY . .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    libsndfile1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir -r requirements.txt
 CMD ["python", "-u", "worker/main.py"]
