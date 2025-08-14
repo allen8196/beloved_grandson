@@ -18,3 +18,10 @@ torch
 torchaudio
 transformers
 accelerate
+soundfile
+librosa
+pyrubberband
+snac
+opencc
+huggingface_hub
+dotenv
