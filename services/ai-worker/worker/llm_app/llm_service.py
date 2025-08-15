@@ -1,4 +1,6 @@
+import importlib
 import os
+import sys
 from typing import Any, Dict
 
 # 禁用 CrewAI 遙測功能（避免連接錯誤）
@@ -9,11 +11,8 @@ os.environ["CREWAI_TELEMETRY_OPT_OUT"] = "true"
 try:
     from .chat_pipeline import AgentManager, handle_user_message
 except Exception:
-    import sys
-
-    sys.path.append(
-        os.path.dirname(os.path.dirname(__file__))
-    )  # 加入 /app/worker 到 sys.path
+    # 若以腳本模式執行（無封包上下文），把 /app/worker 加進 sys.path
+    sys.path.append(os.path.dirname(os.path.dirname(__file__)))
     from llm_app.chat_pipeline import AgentManager, handle_user_message
 
 
@@ -23,7 +22,7 @@ class LLMService:
     def __init__(self) -> None:
         self.agent_manager = AgentManager()
         self._milvus_connected = False
-        self._user_sessions = {}  # 為每個用戶維護獨立的 UserSession
+        self._user_sessions: Dict[str, Any] = {}  # 為每個用戶維護獨立的 UserSession
         self._ensure_milvus_connection()
 
     def _ensure_milvus_connection(self):
@@ -46,7 +45,6 @@ class LLMService:
         """為每個用戶創建獨立的 UserSession（5分鐘超時管理）"""
         if user_id not in self._user_sessions:
             try:
-                # 直接在這裡定義 UserSession 類，避免導入問題
                 import threading
                 import time
 
@@ -62,63 +60,36 @@ class LLMService:
                         threading.Thread(target=self._watchdog, daemon=True).start()
 
                     def update_activity(self):
-                        self.last_active_time = time.time()
+                        import time as _t
+
+                        self.last_active_time = _t.time()
 
                     def _watchdog(self):
+                        import time as _t
+
                         while not self.stop_event.is_set():
-                            time.sleep(5)
+                            _t.sleep(5)
                             if self.last_active_time and (
-                                time.time() - self.last_active_time > self.timeout
+                                _t.time() - self.last_active_time > self.timeout
                             ):
                                 print(f"\n⏳ 閒置超過 {self.timeout}s，開始收尾...")
                                 try:
-                                    # 避免相對導入問題，直接使用絕對路徑導入
-                                    import os
-                                    import sys
-
+                                    # ---- 統一以封包路徑載入，避免相對匯入失敗 ----
                                     current_dir = os.path.dirname(
                                         os.path.abspath(__file__)
+                                    )  # .../llm_app
+                                    project_root = os.path.dirname(
+                                        current_dir
+                                    )  # .../worker
+                                    if project_root not in sys.path:
+                                        sys.path.insert(0, project_root)
+
+                                    agent_mod = importlib.import_module(
+                                        "llm_app.HealthBot.agent"
                                     )
-                                    healthbot_path = os.path.join(
-                                        current_dir, "HealthBot"
+                                    finalize_session = getattr(
+                                        agent_mod, "finalize_session", None
                                     )
-
-                                    if current_dir not in sys.path:
-                                        sys.path.insert(0, current_dir)
-                                    if healthbot_path not in sys.path:
-                                        sys.path.insert(0, healthbot_path)
-
-                                    # 嘗試多種導入方式
-                                    finalize_session = None
-                                    try:
-                                        from HealthBot.agent import finalize_session
-                                    except ImportError:
-                                        try:
-                                            import HealthBot.agent as agent_module
-
-                                            finalize_session = (
-                                                agent_module.finalize_session
-                                            )
-                                        except ImportError:
-                                            # 最後嘗試直接導入模組
-                                            agent_file = os.path.join(
-                                                current_dir, "HealthBot", "agent.py"
-                                            )
-                                            if os.path.exists(agent_file):
-                                                import importlib.util
-
-                                                spec = importlib.util.spec_from_file_location(
-                                                    "agent", agent_file
-                                                )
-                                                agent_module = (
-                                                    importlib.util.module_from_spec(
-                                                        spec
-                                                    )
-                                                )
-                                                spec.loader.exec_module(agent_module)
-                                                finalize_session = (
-                                                    agent_module.finalize_session
-                                                )
 
                                     if finalize_session:
                                         finalize_session(self.user_id)
@@ -128,7 +99,7 @@ class LLMService:
                                         print(f"✅ 用戶 {self.user_id} 會話已結束")
                                     else:
                                         print(
-                                            f"⚠️  無法導入 finalize_session，僅釋放 agent"
+                                            "⚠️ 找不到 finalize_session()；僅釋放 agent"
                                         )
                                         self.agent_manager.release_health_agent(
                                             self.user_id
@@ -141,7 +112,7 @@ class LLMService:
                                         self.agent_manager.release_health_agent(
                                             self.user_id
                                         )
-                                    except:
+                                    except Exception:
                                         pass
                                 self.stop_event.set()
 
@@ -204,10 +175,14 @@ class LLMService:
     def finalize_user_session(self, user_id: str):
         """手動結束用戶會話並整理長期記憶（一般由 UserSession 自動處理）"""
         try:
-            try:
-                from .HealthBot.agent import finalize_session
-            except ImportError:
-                from HealthBot.agent import finalize_session
+            # ---- 統一以封包路徑載入（避免相對匯入失敗）----
+            current_dir = os.path.dirname(os.path.abspath(__file__))  # .../llm_app
+            project_root = os.path.dirname(current_dir)  # .../worker
+            if project_root not in sys.path:
+                sys.path.insert(0, project_root)
+
+            agent_mod = importlib.import_module("llm_app.HealthBot.agent")
+            finalize_session = getattr(agent_mod, "finalize_session", None)
 
             # 停止會話監控
             if user_id in self._user_sessions:
@@ -217,7 +192,10 @@ class LLMService:
                 print(f"🛑 已停止用戶 {user_id} 的會話監控")
 
             # 整理長期記憶並釋放 Agent
-            finalize_session(user_id)
+            if finalize_session:
+                finalize_session(user_id)
+            else:
+                print("⚠️ 找不到 finalize_session()，僅釋放 agent")
             self.agent_manager.release_health_agent(user_id)
             print(f"✅ 手動結束會話：{user_id}")
         except Exception as e:
@@ -285,9 +263,9 @@ if __name__ == "__main__":
     except Exception:
         pass
 
-    # 直接啟動互動測試
+    # 建議以模組模式執行，確保封包路徑正確：
+    #   python -m llm_app.llm_service
     run_interactive_test()
-
     # 測試 LLMService
     # 0. .env.example 改成 .env ，可以不做任何設定
     # 1. 啟動ai-worker和相關的容器

@@ -1,14 +1,12 @@
-from crewai.tools import BaseTool
-from pymilvus import Collection, connections
-from ..embedding import to_vector
 import os
-from openai import OpenAI
 from typing import List
 
-from .redis_store import (
-    commit_summary_chunk,
-    xadd_alert,
-)
+from crewai.tools import BaseTool
+from openai import OpenAI
+from pymilvus import Collection, connections
+
+from ..embedding import to_vector
+from .redis_store import commit_summary_chunk, xadd_alert
 
 _milvus_loaded = False
 _collection = None
@@ -25,17 +23,22 @@ class SearchMilvusTool(BaseTool):
                 try:
                     connections.get_connection("default")
                 except Exception:
-                    connections.connect(alias="default", uri=os.getenv("MILVUS_URI", "http://localhost:19530"))
+                    connections.connect(
+                        alias="default",
+                        uri=os.getenv("MILVUS_URI", "http://localhost:19530"),
+                    )
                 _collection = Collection("copd_qa")
                 _collection.load()
                 _milvus_loaded = True
             thr = float(os.getenv("SIMILARITY_THRESHOLD", 0.6))
             vec = to_vector(query)
             if not isinstance(vec, list):
-                vec = vec.tolist() if hasattr(vec, 'tolist') else list(vec)
+                vec = vec.tolist() if hasattr(vec, "tolist") else list(vec)
             res = _collection.search(
-                data=[vec], anns_field="embedding",
-                param={"metric_type": "COSINE", "params": {"nprobe": 10}}, limit=5,
+                data=[vec],
+                anns_field="embedding",
+                param={"metric_type": "COSINE", "params": {"nprobe": 10}},
+                limit=5,
                 output_fields=["question", "answer", "category"],
             )
             out: List[str] = []
@@ -50,21 +53,36 @@ class SearchMilvusTool(BaseTool):
             return f"[Milvus 錯誤] {e}"
 
 
-def summarize_chunk_and_commit(user_id: str, start_round: int, history_chunk: list) -> bool:
+def summarize_chunk_and_commit(
+    user_id: str, start_round: int, history_chunk: list
+) -> bool:
     if not history_chunk:
         return True
-    text = "".join([f"第{start_round + i + 1}輪:\n長輩: {h['input']}\n金孫: {h['output']}\n\n" for i, h in enumerate(history_chunk)])
+    text = "".join(
+        [
+            f"第{start_round + i + 1}輪:\n長輩: {h['input']}\n金孫: {h['output']}\n\n"
+            for i, h in enumerate(history_chunk)
+        ]
+    )
     prompt = f"請將下列對話做 80-120 字摘要，聚焦：健康問題、情緒、生活要點。\n\n{text}"
     try:
         client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         res = client.chat.completions.create(
             model=os.getenv("MODEL_NAME", "gpt-4o-mini"),
-            messages=[{"role": "system", "content": "你是專業的對話摘要助手。"}, {"role": "user", "content": prompt}],
+            messages=[
+                {"role": "system", "content": "你是專業的對話摘要助手。"},
+                {"role": "user", "content": prompt},
+            ],
             temperature=0.3,
         )
         body = (res.choices[0].message.content or "").strip()
         header = f"--- 第{start_round + 1}至{start_round + len(history_chunk)}輪對話摘要 ---\n"
-        return commit_summary_chunk(user_id, expected_cursor=start_round, advance=len(history_chunk), add_text=header + body)
+        return commit_summary_chunk(
+            user_id,
+            expected_cursor=start_round,
+            advance=len(history_chunk),
+            add_text=header + body,
+        )
     except Exception as e:
         print(f"[摘要錯誤] {e}")
         return False
@@ -72,11 +90,17 @@ def summarize_chunk_and_commit(user_id: str, start_round: int, history_chunk: li
 
 class AlertCaseManagerTool(BaseTool):
     name: str = "alert_case_manager"
-    description: str = "通報個管師：以 Redis Streams 送出即時告警，另存 per-user 快照。"
+    description: str = (
+        "當偵測到使用者輸入涉及緊急健康或心理風險（如呼吸困難、胸痛、自殺意圖），"
+        "使用此工具立即通報個案管理師。輸入需提供事件描述與用戶 ID，"
+        "工具會透過 Redis Streams 發送即時告警，並保存該用戶的對話快照以供後續跟進。"
+    )
 
     def _run(self, reason: str) -> str:
         try:
-            uid = self.runtime_context.get("user_id") or os.getenv("CURRENT_USER_ID", "unknown")
+            uid = self.runtime_context.get("user_id") or os.getenv(
+                "CURRENT_USER_ID", "unknown"
+            )
             xid = xadd_alert(user_id=uid, reason=reason, severity="high")
             return f"⚠️ 已通報個管師（事件ID: {xid}），事由：{reason}"
         except Exception as e:
@@ -85,12 +109,16 @@ class AlertCaseManagerTool(BaseTool):
 
 class ModelGuardrailTool(BaseTool):
     name: str = "model_guardrail"
-    description: str = "使用 LLM 判斷輸入是否涉及違法、危險、自傷，或屬於需專業人士回覆的內容；只回 OK 或 BLOCK: <原因>"
+    description: str = (
+        "完全由 LLM 安全審查：判斷是否違法/危險/自傷，或屬於需專業人士的具體指示（如用藥/劑量/診斷/處置）。只輸出 OK 或 BLOCK: <原因>。"
+    )
 
     def _run(self, text: str) -> str:
         try:
             client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            guard_model = os.getenv("GUARD_MODEL", os.getenv("MODEL_NAME", "gpt-4o-mini"))
+            guard_model = os.getenv(
+                "GUARD_MODEL", os.getenv("MODEL_NAME", "gpt-4o-mini")
+            )
             sys = (
                 "你是安全審查器，需精準判斷是否必須攔截。\n"
                 "【允許（回 OK）】以下情況一律放行：\n"
@@ -112,15 +140,22 @@ class ModelGuardrailTool(BaseTool):
             user = f"使用者輸入：{text}\n請依規則只輸出 OK 或 BLOCK: <原因>。"
             res = client.chat.completions.create(
                 model=guard_model,
-                messages=[{"role": "system", "content": sys}, {"role": "user", "content": user}],
+                messages=[
+                    {"role": "system", "content": sys},
+                    {"role": "user", "content": user},
+                ],
                 temperature=0,
                 max_tokens=24,
             )
             out = (res.choices[0].message.content or "").strip()
-            if not out.startswith("OK") and not out.startswith("BLOCK:"):
-                out = "OK"
+            # 預設寬鬆通過：若非明確 BLOCK，一律視為 OK
+            if not out.startswith("BLOCK:"):
+                return "OK"
+            # 僅保留精簡 BLOCK 理由
+            if len(out) > 256:
+                out = out[:256]
             return out
         except Exception as e:
-            return f"BLOCK: guardrail 服務錯誤（{e}）"
-
-
+            # Guardrail 故障時，不要阻擋主流程
+            print(f"[guardrail_error] {e}")
+            return "OK"

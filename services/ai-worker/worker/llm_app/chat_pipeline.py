@@ -26,7 +26,6 @@ from .toolkits.redis_store import (
     set_audio_result,
     set_state_if,
     try_register_request,
-    xadd_alert,
 )
 from .toolkits.tools import (
     ModelGuardrailTool,
@@ -87,7 +86,8 @@ def handle_user_message(
     # 2) 音檔級鎖：一次且只一次處理同一段音檔
     lock_id = f"{user_id}#audio:{audio_id}"
     # 使用獨立的輕量鎖，避免與其他 session state 衝突
-    if not acquire_audio_lock(lock_id, ttl_sec=30):
+    # P0-1: 增加 TTL 到 180 秒，避免長語音處理時鎖過期
+    if not acquire_audio_lock(lock_id, ttl_sec=180):
         cached = get_audio_result(user_id, audio_id)
         return cached or "我正在處理你的語音，請稍等一下喔。"
 
@@ -117,52 +117,70 @@ def handle_user_message(
             ).strip()
         except Exception:
             guard_res = ModelGuardrailTool()._run(full_text)
-        if guard_res.startswith("BLOCK:"):
-            reason = guard_res[6:].strip()
-            if any(k in reason for k in ["自傷", "自殺", "傷害自己", "緊急"]):
-                xadd_alert(
-                    user_id=user_id,
-                    reason=f"可能自傷風險：{full_text}",
-                    severity="high",
-                )
-            reply = "抱歉，這個問題涉及違規或需專業人士評估，我無法提供解答。"
-            set_audio_result(user_id, audio_id, reply)
-            log_session(user_id, full_text, reply)
-            return reply
+
+            # 只保留攔截與否
+        is_block = guard_res.startswith("BLOCK:")
+        block_reason = guard_res[6:].strip() if is_block else ""
 
         # 產生最終回覆：優先用 CrewAI；失敗則 fallback OpenAI + Milvus 查詢
         try:
             care = agent_manager.get_health_agent(user_id)
-            ctx = build_prompt_from_redis(user_id, k=6, current_input=full_text)
+
+            # P0-3: BLOCK 分支直接跳過記憶/RAG 檢索，節省成本
+            if is_block:
+                ctx = ""  # 不檢索記憶
+            else:
+                ctx = build_prompt_from_redis(user_id, k=6, current_input=full_text)
+
             task = Task(
                 description=(
-                    f"{ctx}\n\n使用者輸入：{full_text}\n請以台語風格溫暖務實回覆；"
-                    "有需要查看COPD相關資料或緊急事件需要通報時，請使用工具。"
+                    f"{ctx}\n\n使用者輸入：{full_text}\n"
+                    "請以『國民孫女』口吻回覆，遵守【回覆風格規則】：禁止列點、不要用數字或符號開頭、避免學術式摘要；台語混中文、自然聊天感。"
+                    + (
+                        "\n【安全政策—必須婉拒】此輸入被安全檢查判定為超出能力範圍（例如違法、成人內容、醫療/用藥/劑量/診斷等具體指示）。"
+                        "請直接婉拒，**不要**提供任何具體方案、診斷或劑量，也**不要**硬給替代作法。"
+                        "僅可給一般層級的安全提醒（如：鼓勵諮詢合格醫師/藥師）與情緒安撫的一兩句話。"
+                        if is_block
+                        else "\n【正常回覆】若內容屬一般衛教/日常關懷，簡短回應並可給 1–2 個小步驟建議。"
+                    )
                 ),
                 expected_output="台語風格的溫暖關懷回覆，必要時使用工具。",
                 agent=care,
             )
             res = Crew(agents=[care], tasks=[task], verbose=False).kickoff().raw or ""
         except Exception:
-            ctx = build_prompt_from_redis(user_id, k=6, current_input=full_text)
-            qa = SearchMilvusTool()._run(full_text)
-            sys = "你是會講台語的健康陪伴者，語氣溫暖務實，避免醫療診斷與劑量指示。必要時提醒就醫。"
-            prompt = (
-                f"{ctx}\n\n相關資料（可能空）：\n{qa}\n\n"
-                f"使用者輸入：{full_text}\n請以台語風格回覆；條列要點，結尾給一段溫暖鼓勵。"
-            )
             client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
             model = os.getenv("MODEL_NAME", "gpt-4o-mini")
-            res_obj = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": sys},
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.5,
-            )
-            res = (res_obj.choices[0].message.content or "").strip()
-
+            if is_block:
+                # P0-3: BLOCK 分支跳過記憶/RAG 檢索
+                sys = "你是會講台語的健康陪伴者。當輸入被判為超出能力範圍時，必須婉拒且不可提供具體方案/診斷/劑量，只能一般性提醒就醫。語氣溫暖、不列點。"
+                user_msg = f"此輸入被判為超出能力範圍（{block_reason or '安全風險'}）。請用台語溫柔婉拒，不提供任何具體建議或替代作法，只做一般安全提醒與情緒安撫 1–2 句。"
+                res_obj = client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": sys},
+                        {"role": "user", "content": user_msg},
+                    ],
+                    temperature=0.2,
+                )
+                res = (res_obj.choices[0].message.content or "").strip()
+            else:
+                ctx = build_prompt_from_redis(user_id, k=6, current_input=full_text)
+                qa = SearchMilvusTool()._run(full_text)
+                sys = "你是會講台語的健康陪伴者，語氣溫暖務實，避免醫療診斷與劑量指示。必要時提醒就醫。"
+                prompt = (
+                    f"{ctx}\n\n相關資料（可能空）：\n{qa}\n\n"
+                    f"使用者輸入：{full_text}\n請以台語風格回覆；結尾給一段溫暖鼓勵。"
+                )
+                res_obj = client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": sys},
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.5,
+                )
+                res = (res_obj.choices[0].message.content or "").strip()
         # 5) 結果快取 + 落歷史
         set_audio_result(user_id, audio_id, res)
         log_session(user_id, full_text, res)
@@ -170,36 +188,3 @@ def handle_user_message(
 
     finally:
         release_audio_lock(lock_id)
-
-
-class UserSession:
-    """用戶會話管理類，負責閒置超時和會話結束處理"""
-
-    def __init__(self, user_id: str, agent_manager: AgentManager, timeout: int = 300):
-        import threading
-        import time
-
-        self.user_id = user_id
-        self.agent_manager = agent_manager
-        self.timeout = timeout
-        self.last_active_time = None
-        self.stop_event = threading.Event()
-        threading.Thread(target=self._watchdog, daemon=True).start()
-
-    def update_activity(self):
-        import time
-
-        self.last_active_time = time.time()
-
-    def _watchdog(self):
-        import time
-
-        while not self.stop_event.is_set():
-            time.sleep(5)
-            if self.last_active_time and (
-                time.time() - self.last_active_time > self.timeout
-            ):
-                print(f"\n⏳ 閒置超過 {self.timeout}s，開始收尾...")
-                finalize_session(self.user_id)
-                self.agent_manager.release_health_agent(self.user_id)
-                self.stop_event.set()
