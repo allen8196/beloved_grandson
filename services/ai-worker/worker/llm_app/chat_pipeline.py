@@ -121,6 +121,10 @@ def handle_user_message(
             # 只保留攔截與否
         is_block = guard_res.startswith("BLOCK:")
         block_reason = guard_res[6:].strip() if is_block else ""
+        
+        print(f"🛡️ Guardrail 檢查結果: {'BLOCK' if is_block else 'OK'} - 查詢: '{full_text[:50]}...'")
+        if is_block:
+            print(f"🚫 攔截原因: {block_reason}")
 
         # 產生最終回覆：優先用 CrewAI；失敗則 fallback OpenAI + Milvus 查詢
         try:
@@ -129,6 +133,7 @@ def handle_user_message(
             # P0-3: BLOCK 分支直接跳過記憶/RAG 檢索，節省成本
             if is_block:
                 ctx = ""  # 不檢索記憶
+                print("⚠️ 因安全檢查攔截，跳過記憶檢索")
             else:
                 ctx = build_prompt_from_redis(user_id, k=6, current_input=full_text)
 

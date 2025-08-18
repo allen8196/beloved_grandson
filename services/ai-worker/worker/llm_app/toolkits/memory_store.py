@@ -229,6 +229,10 @@ def retrieve_memory_pack(
         output_fields=["pk"],  # 只取 pk
     )
     hits = [h for h in res[0] if float(getattr(h, "distance", 0.0)) >= sim_thr]
+    print(f"🔍 記憶檢索結果: 共找到 {len(res[0])} 筆候選，{len(hits)} 筆超過門檻 {sim_thr}")
+    if res[0]:
+        similarities = [f'{float(getattr(h, "distance", 0.0)):.3f}' for h in res[0][:3]]
+        print(f"📊 相似度分佈: {similarities}")
     if not hits:
         return ""
 

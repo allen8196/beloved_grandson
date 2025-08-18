@@ -83,18 +83,22 @@ def build_prompt_from_redis(user_id: str, k: int = 6, current_input: str = "") -
         qv = safe_to_vector(current_input)
         if qv:
             try:
-                # 使用memory_store統一架構：P0-4: Top‑K 降到 3，動態門檻 max(0.72, mean+1σ)
-                # TODO: 實現動態門檻計算，目前先用固定 0.72
-                dynamic_threshold = max(0.72, 0.78)  # 暫時保持 0.78，待實現動態計算
+                # 使用memory_store統一架構：P0-4: 降低門檻提升召回率
+                # 將相似度門檻從 0.78 降低到 0.55，大幅提升記憶召回率
+                dynamic_threshold = 0.55  # 更低門檻確保能檢索到相關記憶
+                print(f"🔍 開始記憶檢索：user_id={user_id}, query='{current_input[:50]}...', threshold={dynamic_threshold}")
                 mem_pack = retrieve_memory_pack(
                     user_id=user_id,
                     query_vec=qv,
-                    topk=3,
+                    topk=5,  # 增加到 5 筆以涵蓋更多相關記憶
                     sim_thr=dynamic_threshold,
                     tau_days=45,
                 )
                 if mem_pack:
-                    print(f"🧠 為用戶 {user_id} 檢索到長期記憶")
+                    print(f"🧠 為用戶 {user_id} 檢索到長期記憶: {len(mem_pack)} 字符")
+                    print(f"💾 記憶內容預覽: {mem_pack[:200]}...")
+                else:
+                    print(f"❌ 用戶 {user_id} 未檢索到任何長期記憶（門檻: {dynamic_threshold}）")
             except Exception as e:
                 print(f"[memory retrieval error] {e}")
                 mem_pack = ""
@@ -283,7 +287,10 @@ def _extract_memory_candidates_from_summary(summary_text: str) -> list:
             text = (a.get("text") or "").strip()
             if not text:
                 continue
-            emb = safe_to_vector(text)
+            raw_text = (a.get("text") or "").strip()
+            nk = (a.get("norm_key") or "").strip()
+            text_for_embed = f"[{nk}] {raw_text}" if nk else raw_text
+            emb = safe_to_vector(text_for_embed)
             out.append(
                 {
                     "type": (a.get("type") or "other")[:32],
