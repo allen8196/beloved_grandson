@@ -1,8 +1,14 @@
 # -*- coding: utf-8 -*-
-import os, json, time, hashlib
-import redis
+import hashlib
+import json
+import os
+import time
 from functools import lru_cache
-from typing import List, Tuple, Optional, Dict
+from typing import Dict, List, Optional, Tuple
+
+import redis
+from .profile_store import touch_last_contact_ts
+from ..repositories.profile_repository import ProfileRepository
 
 REDIS_TTL_SECONDS = int(os.getenv("REDIS_TTL_SECONDS", 86400))
 ALERT_STREAM_KEY = os.getenv("ALERT_STREAM_KEY", "alerts:stream")
@@ -57,6 +63,14 @@ def append_round(user_id: str, round_obj: Dict) -> None:
         f"session:{user_id}:alerts",
         f"session:{user_id}:state",
     ])
+    ProfileRepository().touch_last_contact_ts(user_id)
+
+# 【新增】主動關懷專用函式
+def append_proactive_round(user_id: str, round_obj: Dict) -> None:
+    """專門用於寫入主動關懷訊息，但不重置閒置計時器。"""
+    r = get_redis()
+    key = f"session:{user_id}:history"
+    r.rpush(key, json.dumps(round_obj, ensure_ascii=False))
 
 
 def history_len(user_id: str) -> int:

@@ -5,12 +5,14 @@ os.environ["OTEL_SDK_DISABLED"] = "true"
 os.environ["CREWAI_TELEMETRY_OPT_OUT"] = "true"
 
 import time
+import json
 
 from crewai import LLM, Agent
 from openai import OpenAI
 
 from ..embedding import safe_to_vector
 from ..toolkits.memory_store import retrieve_memory_pack, upsert_memory_atoms
+from ..repositories.profile_repository import ProfileRepository
 from ..toolkits.redis_store import (
     fetch_all_history,
     fetch_unsummarized_tail,
@@ -58,6 +60,10 @@ def _shrink_tail(text: str, max_chars: int) -> str:
 
 
 def build_prompt_from_redis(user_id: str, k: int = 6, current_input: str = "") -> str:
+    # 0) 取使用者Profile
+    profile_data = ProfileRepository().read_profile_as_dict(user_id)
+    profile_str = json.dumps({k: v for k, v in profile_data.items() if isinstance(v, dict)}, ensure_ascii=False, indent=2) if any(profile_data.values()) else "尚無使用者畫像資訊"
+    
     # 1) 取歷史摘要（控長度）
     summary, _ = get_summary(user_id)
     summary = _shrink_tail(summary, SUMMARY_MAX_CHARS) if summary else ""
@@ -76,6 +82,9 @@ def build_prompt_from_redis(user_id: str, k: int = 6, current_input: str = "") -
         chat = chat[-STM_MAX_CHARS:]
 
     parts = []
+
+    # 3.0) 優先加入Profile
+    parts.append(f"⭐ 使用者畫像：\n{profile_str}")
 
     # 3) 先注入：⭐ 個人長期記憶（依據當前輸入檢索相關記憶）
     mem_pack = ""
@@ -375,9 +384,203 @@ def refine_summary(user_id: str) -> None:
             print(f"✅ 已為用戶 {user_id} 存入 {count} 筆長期記憶")
         else:
             print(f"⚠️ 用戶 {user_id} 本次會話未產生可存入的記憶")
+        return final
 
     except Exception as e:
         print(f"[refine_summary error] {e}")
+        return ""
+
+PROFILER_AGENT_PROMPT_TEMPLATE = """
+# ROLE
+你是一位經驗豐富、心思縝密的個案管理師。你的工作是為每一位使用者維護一份精簡、準確、且對未來關懷最有幫助的「使用者畫像 (User Profile)」。
+
+# GOAL
+你的目標是根據「新的對話摘要」，來決定如何「更新既有的使用者畫像」。你必須辨別出具有長期價值的資訊，並以結構化的指令格式輸出你的決策。
+
+# CORE LOGIC & RULES
+1.  **專注長期價值**: 只提取恆定的（如家人姓名）、長期的（如慢性病）或未來可追蹤的（如下次回診）資訊。忽略短暫的、一次性的對話細節（如今天天氣、午餐吃了什麼）。
+2.  **新增 (ADD)**: 如果新摘要中出現了畫像裡沒有的、具長期價值的關鍵事實，你應該新增它。
+3.  **更新 (UPDATE)**: 如果新摘要提及了畫像中已有的事實，並提供了新的資訊（如症狀再次出現、事件日期確定），你應該更新它。
+4.  **移除 (REMOVE)**: 如果新摘要明確指出某個事實已結束或失效（如聚餐已結束、症狀已痊癒），你應該移除它。
+5.  **合併與去重**: 不要重複記錄相同的事實。如果新摘要只是重複提及已知事實，更新 `last_mentioned` 日期即可。
+6.  **無變動則留空**: 如果新摘要沒有提供任何值得更新的長期事實，請回傳一個空的 JSON 物件 `{{}}`。
+
+# OUTPUT FORMAT
+你「必須」嚴格按照以下 JSON 格式輸出一個操作指令集。這讓後端系統可以安全地執行你的決策。
+{{
+  "add": {{ "key1": "value1", "key2": {{ ... }} }},
+  "update": {{ "key3": "new_value3" }},
+  "remove": ["key4", "key5"]
+}}
+
+---
+# CONTEXT & IN-CONTEXT LEARNING EXAMPLES
+
+**## 情境輸入 ##**
+1.  **既有使用者畫像 (Existing Profile)**: 
+    {{profile_data}}
+2.  **新的對話摘要 (New Summary)**: 
+    {{final_summary}}
+
+---
+**## 學習範例 1：新增與更新 ##**
+
+* **既有使用者畫像**:
+    ```json
+    {{
+      "health_status": {{
+        "recurring_symptoms": [
+          {{"symptom_name": "夜咳", "status": "ongoing", "first_mentioned": "2025-08-01", "last_mentioned": "2025-08-05"}}
+        ]
+      }}
+    }}
+    ```
+* **新的對話摘要**:
+    "使用者情緒不錯，提到女兒美玲下週要帶孫子回來看他，感到很期待。另外，使用者再次抱怨了夜咳的狀況，但感覺比上週好一些。"
+* **你的思考**: 新摘要中，「女兒美玲」和「孫子」是新的、重要的家庭成員資訊，應新增。`夜咳` 是既有症狀，應更新 `last_mentioned` 日期。
+* **你的輸出**:
+    ```json
+    {{
+      "add": {{
+        "personal_background": {{
+          "family": {{"daughter_name": "美玲", "has_grandchild": true}}
+        }}
+      }},
+      "update": {{
+        "health_status": {{
+          "recurring_symptoms": [
+            {{"symptom_name": "夜咳", "status": "ongoing", "first_mentioned": "2025-08-01", "last_mentioned": "2025-08-14"}}
+          ]
+        }}
+      }},
+      "remove": []
+    }}
+    ```
+
+---
+**## 學習範例 2：事件結束與狀態變更 ##**
+
+* **既有使用者畫像**:
+    ```json
+    {{
+      "life_events": {{
+        "upcoming_events": [
+          {{"event_type": "family_visit", "description": "女兒美玲下週帶孫子來訪", "event_date": "2025-08-22"}}
+        ]
+      }},
+      "health_status": {{
+        "recurring_symptoms": [
+          {{"symptom_name": "夜咳", "status": "ongoing", "first_mentioned": "2025-08-01", "last_mentioned": "2025-08-14"}}
+        ]
+      }}
+    }}
+    ```
+* **新的對話摘要**:
+    "使用者分享了週末和女兒孫子團聚的愉快時光，心情非常好。他還提到，這幾天睡得很好，夜咳的狀況幾乎沒有了。"
+* **你的思考**: 「女兒來訪」這個未來事件已經發生，應移除。`夜咳` 狀況已改善，應更新其狀態。
+* **你的輸出**:
+    ```json
+    {{
+      "add": {{}},
+      "update": {{
+        "health_status": {{
+          "recurring_symptoms": [
+            {{"symptom_name": "夜咳", "status": "resolved", "first_mentioned": "2025-08-01", "last_mentioned": "2025-08-25"}}
+          ]
+        }}
+      }},
+      "remove": ["life_events.upcoming_events"]
+    }}
+    ```
+
+---
+**## 你的任務開始 ##**
+
+請根據以下真實情境輸入，嚴格遵循你的角色、邏輯與輸出格式，生成操作指令。
+
+**既有使用者畫像**: 
+`{profile_data}`
+
+**新的對話摘要**: 
+`{final_summary}`
+
+**你的輸出**:
+```json
+"""
+
+def create_profiler_agent() -> Agent:
+    """【修正】建立一個專門用來更新 Profile 的 Agent 物件"""
+    return Agent(
+        role="個案管理師",
+        goal="根據新的對話摘要，決定如何更新既有的使用者畫像，並以結構化的 JSON 指令格式輸出決策。",
+        backstory="你是一位經驗豐富、心思縝密的個案管理師，專注於從對話中提取具有長期價值的資訊來維護精簡、準確的使用者畫像。",
+        llm=ChatOpenAI(model=os.getenv("MODEL_NAME", "gpt-4o-mini"), temperature=0.1), # 使用低溫以確保輸出穩定
+        memory=False,
+        verbose=False,
+        allow_delegation=False
+    )
+
+
+def run_profiler_update(user_id: str, final_summary: str):
+    """
+    【修正】在 LTM 生成後，觸發 Profiler Agent 來更新使用者畫像的完整實作。
+    """
+    if not final_summary or not final_summary.strip():
+        print(f"[Profiler] 摘要為空，跳過為 {user_id} 更新 Profile。")
+        return
+
+    print(f"[Profiler] 開始為 {user_id} 更新 Profile...")
+    repo = ProfileRepository()
+    
+    # 1. 獲取舊 Profile
+    old_profile = repo.read_profile_as_dict(user_id)
+    old_profile_str = json.dumps(old_profile, ensure_ascii=False, indent=2) if any(old_profile.values()) else "{}"
+    
+    # 2. 建立 Profiler Agent 並執行任務
+    profiler_agent = create_profiler_agent()
+    
+    # 【新增】組合完整的 Prompt
+    full_prompt = PROFILER_AGENT_PROMPT_TEMPLATE.format(
+        profile_data=old_profile_str,
+        final_summary=final_summary
+    )
+    
+    profiler_task = Task(
+        description=full_prompt,
+        agent=profiler_agent,
+        expected_output="一個包含 'add', 'update', 'remove' 指令的 JSON 物件。"
+    )
+    
+    crew = Crew(
+        agents=[profiler_agent],
+        tasks=[profiler_task],
+        process=Process.sequential,
+        verbose=False
+    )
+    
+    update_commands_str = crew.kickoff()
+    
+    # 3. 解析指令並更新資料庫
+    try:
+        # 【新增】從 JSON 字串中提取 JSON 物件
+        start_index = update_commands_str.find('{')
+        end_index = update_commands_str.rfind('}') + 1
+        if start_index == -1 or end_index == 0:
+            raise json.JSONDecodeError("No JSON object found in the output", update_commands_str, 0)
+        
+        json_str = update_commands_str[start_index:end_index]
+        update_commands = json.loads(json_str)
+
+        if update_commands:
+            repo.update_profile_facts(user_id, update_commands)
+        else:
+            print(f"[Profiler] LLM 為 {user_id} 回傳了空的更新指令。")
+            
+    except json.JSONDecodeError as e:
+        print(f"❌ [Profiler] 解析 LLM 輸出的 JSON 失敗: {e}")
+        print(f"原始輸出: {update_commands_str}")
+    except Exception as e:
+        print(f"❌ [Profiler] 更新 Profile 過程中發生未知錯誤: {e}")
 
 
 # ---- Finalize：補分段摘要 → Refine → Purge ----
@@ -396,4 +599,5 @@ def finalize_session(user_id: str) -> None:
     if remaining:
         summarize_chunk_and_commit(user_id, start_round=start, history_chunk=remaining)
     refine_summary(user_id)
+    run_profiler_update(user_id, final)
     purge_user_session(user_id)
