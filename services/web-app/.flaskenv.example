@@ -1,8 +1,8 @@
 # 資料庫與服務連線資訊 (開發用)
 # 注意：在生產環境中，這些值應來自更安全的來源，如 Docker Secrets 或環境變數
-DATABASE_URL="postgresql://user:password@postgres:5432/mydatabase"
+DATABASE_URL="postgresql://admin:secret_password_change_me@postgres:5432/ai_assistant_db"
 REDIS_URL="redis://redis:6379/0"
-MONGO_URI="mongodb://mongodb:27017/conversations"
+MONGO_URI="mongodb://mongo_admin:mongo_secret_password_change_me@mongodb:27017/"
 RABBITMQ_URL="amqp://guest:guest@rabbitmq:5672/"
 
 # MinIO 設定

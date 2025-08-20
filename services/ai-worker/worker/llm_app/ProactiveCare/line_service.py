@@ -1,6 +1,6 @@
-# llm_app/services/line_service.py
 import os
 import requests
+import json
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -25,7 +25,8 @@ class LineService:
         data = {"to": line_user_id, "messages": [{"type": "text", "text": text}]}
 
         try:
-            response = requests.post(self.push_url, headers=headers, json=json.dumps(data), timeout=10)
+            # 【修正】requests 會自動處理字典到 JSON 字串的轉換
+            response = requests.post(self.push_url, headers=headers, json=data, timeout=10)
             if response.status_code == 200:
                 print(f"✅ [LINE Push] 成功發送訊息給 {line_user_id}")
                 return True

@@ -7,7 +7,6 @@ from functools import lru_cache
 from typing import Dict, List, Optional, Tuple
 
 import redis
-from .profile_store import touch_last_contact_ts
 from ..repositories.profile_repository import ProfileRepository
 
 REDIS_TTL_SECONDS = int(os.getenv("REDIS_TTL_SECONDS", 86400))

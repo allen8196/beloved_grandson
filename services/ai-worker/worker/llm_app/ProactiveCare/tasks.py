@@ -12,13 +12,7 @@ from ..toolkits.redis_store import append_proactive_round
 from ..toolkits.memory_store import retrieve_memory_pack
 from ..repositories.profile_repository import ProfileRepository
 from ..models.chat_profile import ChatUserProfile # 【新增】導入模型以供查詢
-
-try:
-    from ..HealthBot.agent import create_guardrail_agent
-
-    guardrail_agent = create_guardrail_agent()
-except ImportError:
-    guardrail_agent = None
+from ..HealthBot.agent import create_guardrail_agent
 
 
 load_dotenv()
@@ -26,21 +20,13 @@ load_dotenv()
 # --- 初始化 ---
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
-# LTM_COLLECTION_NAME = os.getenv("MEM_COLLECTION", "user_memory")
-
-_ltm_collection_cache = None
-def get_cached_ltm_collection():
-    global _ltm_collection_cache
-    if _ltm_collection_cache is None:
-        print("🔄 首次載入 Milvus LTM Collection...")
-        _ltm_collection_cache = get_milvus_collection(LTM_COLLECTION_NAME)
-    return _ltm_collection_cache
+guardrail_agent = create_guardrail_agent()
 
 def get_proactive_care_prompt_template() -> str:
     """返回主動關懷的 Prompt 模板"""
     return """
 # ROLE (角色)
-你是一位數位金孫，年約25歲，溫柔體貼且觀察力敏銳。你的專長是從長輩的日常對話中，記住那些重要的生活點滴和健康狀況，並在合適的時機主動給予溫暖的問候。你的溝通風格帶有自然的台灣閩南語口吻（但請以中文書面語輸出），親切而不失分寸。
+你是「艾莉」，22 歲，溫柔體貼且觀察力敏銳，在醫院工作，專門陪伴與關懷 55 歲以上、患有慢性阻塞性肺病 (COPD) 的長輩用戶。你的專長是從長輩的日常對話中，記住那些重要的生活點滴和健康狀況，並在合適的時機主動給予溫暖的問候。你的溝通風格帶有自然的台灣閩南語口吻（但請以中文書面語輸出），親切而不失分寸。
 
 # GOAL (目標)
 你的目標是根據提供的「使用者畫像」和「近期對話摘要」，生成一句**自然、簡潔、且發自內心**的主動關懷訊息。這則訊息應該像家人之間的隨口關心，而不是一則系統通知。最終目標是開啟一段有意義的對話，讓使用者感受到被關心。
@@ -167,15 +153,14 @@ def execute_proactive_care(profile_repo: ProfileRepository, user: object):
     profile_data = {k: v for k, v in profile_data.items() if v is not None}
     profile_str = json.dumps(profile_data, ensure_ascii=False, indent=2) if profile_data else "{}"
 
-    # 從 Milvus 讀取近期 LTM
-    # 【修正】 tau_days=7 表示只看近一週的記憶，更具即時性
+    # 從 Milvus 讀取近期 LTM（tau_days=7 表示只看近一週的記憶，更具即時性）
     recent_ltm_texts_str = retrieve_memory_pack(user_id=line_user_id, topk=5, tau_days=7) 
 
     # 2. 生成 Prompt
     final_prompt = get_proactive_care_prompt_template().format(
         now=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         profile=profile_str,
-        recent_summary=recent_ltm_texts_str or "最近沒有特別的對話紀錄。" # 【修正】提供更自然的預設值
+        recent_summary=recent_ltm_texts_str or "最近沒有特別的對話紀錄。" 
     )
 
     # 3. 呼叫 LLM
@@ -202,7 +187,7 @@ def execute_proactive_care(profile_repo: ProfileRepository, user: object):
             expected_output="合規回覆'OK'，不合規回覆'REJECT: <原因>'"
         )
         guard_crew = Crew(agents=[guardrail_agent], tasks=[guard_task], verbose=False)
-        guard_result = (guard_crew.kickoff().raw or "").strip()
+        guard_result = (guard_crew.kickoff() or "").strip()
         
         if guard_result.startswith("REJECT"):
             print(f"🛡️ 輸出守衛攔截了對 {line_user_id} 的訊息: {guard_result}")
@@ -225,10 +210,11 @@ def check_and_trigger_dynamic_care():
     db = repo._get_db()
     try:
         # 尋找 last_contact_ts 在 24 小時到 24 小時 10 分鐘前的用戶
-        time_window_start = datetime.utcnow() - timedelta(hours=24, minutes=10)
-        time_window_end = datetime.utcnow() - timedelta(hours=24)
+        # 使用 timezone-aware 的時間進行比較
+        utc_now = datetime.utcnow()
+        time_window_start = utc_now - timedelta(hours=24, minutes=10)
+        time_window_end = utc_now - timedelta(hours=24)
         
-        # 【修正】移除 is_active 欄位
         users_to_care = db.query(ChatUserProfile).filter(
             ChatUserProfile.last_contact_ts.between(time_window_start, time_window_end)
         ).all()
@@ -247,8 +233,6 @@ def patrol_silent_users():
     db = repo._get_db()
     try:
         seven_days_ago = datetime.utcnow() - timedelta(days=7)
-        
-        # 【修正】移除 is_active 欄位，並將 OR 條件用括號包起來
         users_to_care = db.query(ChatUserProfile).filter(
             (ChatUserProfile.last_contact_ts == None) | (ChatUserProfile.last_contact_ts < seven_days_ago)
         ).all()

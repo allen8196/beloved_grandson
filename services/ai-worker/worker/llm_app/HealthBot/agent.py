@@ -6,8 +6,10 @@ os.environ["CREWAI_TELEMETRY_OPT_OUT"] = "true"
 
 import time
 import json
+import datetime
 
-from crewai import LLM, Agent
+from crewai import LLM, Agent, Crew, Task, Process
+from langchain_openai import ChatOpenAI
 from openai import OpenAI
 
 from ..embedding import safe_to_vector
@@ -174,6 +176,7 @@ def build_prompt_from_redis(user_id: str, k: int = 6, current_input: str = "") -
     print("📜 Prompt 結構:")
 
     section_icons = {
+        "⭐ 使用者畫像": "👤",
         "⭐ 個人長期記憶": "📂",
         "📌 歷史摘要": "🗂️",
         "🕓 近期對話（未摘要）": "💬",
@@ -392,7 +395,7 @@ def refine_summary(user_id: str) -> None:
 
 PROFILER_AGENT_PROMPT_TEMPLATE = """
 # ROLE
-你是一位經驗豐富、心思縝密的個案管理師。你的工作是為每一位使用者維護一份精簡、準確、且對未來關懷最有幫助的「使用者畫像 (User Profile)」。
+你是「艾莉」，22 歲，剛從護理專科畢業，專門陪伴與關懷 55 歲以上、患有慢性阻塞性肺病 (COPD) 的長輩用戶。你的工作是為每一位使用者維護一份精簡、準確、且對未來關懷最有幫助的「使用者畫像 (User Profile)」。
 
 # GOAL
 你的目標是根據「新的對話摘要」，來決定如何「更新既有的使用者畫像」。你必須辨別出具有長期價值的資訊，並以結構化的指令格式輸出你的決策。
@@ -404,6 +407,7 @@ PROFILER_AGENT_PROMPT_TEMPLATE = """
 4.  **移除 (REMOVE)**: 如果新摘要明確指出某個事實已結束或失效（如聚餐已結束、症狀已痊癒），你應該移除它。
 5.  **合併與去重**: 不要重複記錄相同的事實。如果新摘要只是重複提及已知事實，更新 `last_mentioned` 日期即可。
 6.  **無變動則留空**: 如果新摘要沒有提供任何值得更新的長期事實，請回傳一個空的 JSON 物件 `{{}}`。
+7.  **絕對時間制**: 你的輸出若包含日期，皆必須使用參考今天日期(NOW)，換算為YYYY-MM-DD格式，不可使用相對時間（如下週、下個月）。
 
 # OUTPUT FORMAT
 你「必須」嚴格按照以下 JSON 格式輸出一個操作指令集。這讓後端系統可以安全地執行你的決策。
@@ -465,7 +469,7 @@ PROFILER_AGENT_PROMPT_TEMPLATE = """
     {{
       "life_events": {{
         "upcoming_events": [
-          {{"event_type": "family_visit", "description": "女兒美玲下週帶孫子來訪", "event_date": "2025-08-22"}}
+          {{"event_type": "family_visit", "description": "女兒美玲2025-08-17~2025-08-23帶孫子來訪", "event_date": "2025-08-22"}}
         ]
       }},
       "health_status": {{
@@ -497,6 +501,9 @@ PROFILER_AGENT_PROMPT_TEMPLATE = """
 **## 你的任務開始 ##**
 
 請根據以下真實情境輸入，嚴格遵循你的角色、邏輯與輸出格式，生成操作指令。
+
+**當前時間**: 
+`{now}`
 
 **既有使用者畫像**: 
 `{profile_data}`
@@ -540,7 +547,9 @@ def run_profiler_update(user_id: str, final_summary: str):
     profiler_agent = create_profiler_agent()
     
     # 【新增】組合完整的 Prompt
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     full_prompt = PROFILER_AGENT_PROMPT_TEMPLATE.format(
+        now=now_str,
         profile_data=old_profile_str,
         final_summary=final_summary
     )
@@ -571,10 +580,10 @@ def run_profiler_update(user_id: str, final_summary: str):
         json_str = update_commands_str[start_index:end_index]
         update_commands = json.loads(json_str)
 
-        if update_commands:
+        if update_commands and any(update_commands.values()):
             repo.update_profile_facts(user_id, update_commands)
         else:
-            print(f"[Profiler] LLM 為 {user_id} 回傳了空的更新指令。")
+            print(f"[Profiler] LLM 為 {user_id} 回傳了空的更新指令，無需更新。")
             
     except json.JSONDecodeError as e:
         print(f"❌ [Profiler] 解析 LLM 輸出的 JSON 失敗: {e}")
@@ -592,12 +601,16 @@ def finalize_session(user_id: str) -> None:
     1. 設置狀態為 FINALIZING
     2. 處理剩餘未摘要的對話
     3. 進行全量 refine 摘要
-    4. 清除 session 資料
+    4. 根據最終摘要更新使用者 Profile
+    5. 清除 session 資料
     """
     set_state_if(user_id, expect="ACTIVE", to="FINALIZING")
     start, remaining = peek_remaining(user_id)
     if remaining:
         summarize_chunk_and_commit(user_id, start_round=start, history_chunk=remaining)
-    refine_summary(user_id)
-    run_profiler_update(user_id, final)
+    final_summary = refine_summary(user_id)
+    if final_summary:
+        run_profiler_update(user_id, final_summary)
+    else:
+        print(f"ℹ️ 用戶 {user_id} 的會話未產生最終摘要，跳過 Profile 更新。")
     purge_user_session(user_id)

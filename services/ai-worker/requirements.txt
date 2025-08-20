@@ -26,3 +26,7 @@ opencc
 huggingface_hub
 dotenv
 bitsandbytes
+psycopg2-binary
+APScheduler
+Flask
+line-bot-sdk
