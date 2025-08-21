@@ -77,10 +77,11 @@ class ProfileRepository:
                         
                         updated_data = deep_merge(dict(current_data), facts)
                         
-                        # 【新增】只有在資料真的改變時才設定
-                        if updated_data != current_data:
-                            setattr(profile, field_name, updated_data)
-                            is_modified = True
+                        # 【修改】簡化判斷邏輯
+                        # 只要 LLM 輸出了 add 或 update 指令，我們就視為有修改意圖
+                        # 並且直接賦值。SQLAlchemy 會處理後續的變更追蹤。
+                        setattr(profile, field_name, updated_data)
+                        is_modified = True
 
             # 處理 'remove'
             for key_to_remove in facts_to_update.get('remove', []):
