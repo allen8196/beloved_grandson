@@ -6,6 +6,26 @@ from llm_app.llm_service import LLMService
 from stt_app.stt_service import STTService
 from tts_app.tts_service import TTSService
 
+def initialize_database():
+    """
+    確保所有必要的資料庫和表格都已建立。
+    這個函式可安全地重複執行。
+    """
+    print("--- 開始進行資料庫初始化檢查 ---", flush=True)
+    try:
+        from llm_app.models.chat_profile import create_profile_table_if_not_exists
+        # 呼叫 SQLAlchemy 的 create_all()，它會自動檢查表格是否存在
+        create_profile_table_if_not_exists()
+        print("--- 資料庫初始化檢查完成 ---", flush=True)
+    except ImportError as e:
+        print(f"[!] 初始化錯誤：無法導入模組。請確認路徑設定。 {e}", flush=True)
+    except Exception as e:
+        # 在實際生產環境中，這裡可能需要更複雜的重試邏輯
+        print(f"[!] 資料庫初始化失敗: {e}", flush=True)
+        print("[!] 可能是資料庫服務尚未完全就緒，稍後重試...", flush=True)
+        # 拋出異常，讓主循環可以捕捉並重試
+        raise
+
 def publish_notification(message: dict, patient_id: int):
     """將訊息發佈到通知佇列。"""
     rabbitmq_host = os.environ.get("RABBITMQ_HOST", "rabbitmq")
