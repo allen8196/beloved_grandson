@@ -8,11 +8,12 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from .line_service import line_service # 【修正】使用相對導入
-from ..toolkits.redis_store import append_proactive_round
-from ..toolkits.memory_store import retrieve_memory_pack
+from ..toolkits.redis_store import append_proactive_round, get_expired_sessions
+from ..toolkits.memory_store import get_recent_memories 
 from ..repositories.profile_repository import ProfileRepository
 from ..models.chat_profile import ChatUserProfile # 【新增】導入模型以供查詢
 from ..HealthBot.agent import create_guardrail_agent
+from ..llm_service import llm_service_instance
 
 
 load_dotenv()
@@ -21,6 +22,24 @@ load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
 guardrail_agent = create_guardrail_agent()
+
+def cleanup_expired_sessions():
+    """
+    每分鐘執行一次，掃描並清理所有過期的使用者 Session。
+    """
+    print(f"\n[Session Cleanup] {datetime.now()} Running expired session cleanup job...")
+    
+    expired_user_ids = get_expired_sessions()
+    
+    if not expired_user_ids:
+        print("[Session Cleanup] No expired sessions found.")
+        return
+        
+    print(f"[Session Cleanup] Found {len(expired_user_ids)} expired sessions: {expired_user_ids}")
+
+    for user_id in expired_user_ids:
+        llm_service_instance.finalize_user_session_now(user_id)
+
 
 def get_proactive_care_prompt_template() -> str:
     """返回主動關懷的 Prompt 模板"""
@@ -40,7 +59,7 @@ def get_proactive_care_prompt_template() -> str:
 3.  **保持簡潔開放**: 你的訊息應該簡短、口語化，並以一個開放式問題結尾，方便長輩接話。
 4.  **避免機械化**: 你的訊息應避免類似問卷調查，這易使對話變成資訊問答。你的目標應為開啟話題，讓使用者願意接續聊天。
 5.  **嚴禁醫療建議**: 絕對不可以在主動關懷中提供任何診斷、用藥或治療建議。
-6.  **沉默是金**: 如果分析完所有資訊後，你找不到任何真誠、有意義的關懷切入點，請直接輸出一組空括號 `{}`。這代表此刻最好保持沉默，避免發送無意義的罐頭訊息打擾使用者。
+6.  **沉默是金**: 如果分析完所有資訊後，你找不到任何真誠、有意義的關懷切入點，請直接輸出一組空括號 `{{}}`。這代表此刻最好保持沉默，避免發送無意義的罐頭訊息打擾使用者。
 ---
 # IN-CONTEXT LEARNING EXAMPLES (學習範例)
 **## 學習範例 1：關心持續中的健康問題 (優先級 1) ##**
@@ -154,7 +173,7 @@ def execute_proactive_care(profile_repo: ProfileRepository, user: object):
     profile_str = json.dumps(profile_data, ensure_ascii=False, indent=2) if profile_data else "{}"
 
     # 從 Milvus 讀取近期 LTM（tau_days=7 表示只看近一週的記憶，更具即時性）
-    recent_ltm_texts_str = retrieve_memory_pack(user_id=line_user_id, topk=5, tau_days=7) 
+    recent_ltm_texts_str = get_recent_memories(user_id=line_user_id, topk=5, days_limit=7)
 
     # 2. 生成 Prompt
     final_prompt = get_proactive_care_prompt_template().format(
@@ -187,7 +206,8 @@ def execute_proactive_care(profile_repo: ProfileRepository, user: object):
             expected_output="合規回覆'OK'，不合規回覆'REJECT: <原因>'"
         )
         guard_crew = Crew(agents=[guardrail_agent], tasks=[guard_task], verbose=False)
-        guard_result = (guard_crew.kickoff() or "").strip()
+        crew_output = guard_crew.kickoff()
+        guard_result = (crew_output.raw if crew_output else "").strip()
         
         if guard_result.startswith("REJECT"):
             print(f"🛡️ 輸出守衛攔截了對 {line_user_id} 的訊息: {guard_result}")
@@ -212,8 +232,8 @@ def check_and_trigger_dynamic_care():
         # 尋找 last_contact_ts 在 24 小時到 24 小時 10 分鐘前的用戶
         # 使用 timezone-aware 的時間進行比較
         utc_now = datetime.utcnow()
-        time_window_start = utc_now - timedelta(hours=24, minutes=10)
-        time_window_end = utc_now - timedelta(hours=24)
+        time_window_start = utc_now - timedelta(minutes=55)
+        time_window_end = utc_now - timedelta(minutes=40)
         
         users_to_care = db.query(ChatUserProfile).filter(
             ChatUserProfile.last_contact_ts.between(time_window_start, time_window_end)

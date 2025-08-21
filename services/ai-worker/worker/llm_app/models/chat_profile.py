@@ -1,5 +1,5 @@
 # llm_app/models/chat_profile.py
-from sqlalchemy import create_engine, Column, String, DateTime
+from sqlalchemy import create_engine, Column, String, DateTime, Integer, ForeignKey
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import sessionmaker, declarative_base
 from datetime import datetime
@@ -22,7 +22,13 @@ Base = declarative_base()
 class ChatUserProfile(Base):
     __tablename__ = 'chat_user_profiles'
     
-    line_user_id = Column(String, primary_key=True, index=True)
+    # 【修改】主鍵改為 user_id，與主資料庫 users.id 對應
+    # 這裡不設定 ForeignKey，因為這個模組是獨立的，但邏輯上它是外鍵
+    id = Column(Integer, primary_key=True, autoincrement=True) # 新增一個獨立的 PK
+    user_id = Column(Integer, unique=True, nullable=False, index=True)
+
+    # 【修改】line_user_id 改為一般欄位，但仍需唯一且建立索引
+    line_user_id = Column(String, unique=True, index=True)
     profile_personal_background = Column(JSONB)
     profile_health_status = Column(JSONB)
     profile_life_events = Column(JSONB)

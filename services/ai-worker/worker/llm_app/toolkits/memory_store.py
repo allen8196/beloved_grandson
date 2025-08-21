@@ -4,6 +4,7 @@ import hashlib
 import math
 import os
 import time
+from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
 try:
@@ -242,7 +243,9 @@ def retrieve_memory_pack(
         return ""
     # Milvus query 支援 in 語法
     pk_expr = f"pk in [{','.join(str(pk) for pk in pk_list)}]"
-    full_rows = c.query(expr=pk_expr, output_fields=None)  # None 取全部欄位
+    # 【修正】明確指定需要回傳的欄位，增強穩定性
+    output_fields = ["pk", "text", "type", "norm_key", "importance", "times_seen", "last_used_at", "updated_at", "embedding"]
+    full_rows = c.query(expr=pk_expr, output_fields=output_fields)
     pk2row = {row["pk"]: row for row in full_rows}
 
     # 同 norm_key 去重：保留分數最高
@@ -263,6 +266,7 @@ def retrieve_memory_pack(
     if picked:
         try:
             now = _now_ms()
+            rows_to_update = []
             for item in picked:
                 e = item["row"]
                 pk = e.get("pk")
@@ -274,26 +278,78 @@ def retrieve_memory_pack(
                             f"[warning] missing embedding for pk={pk}, skipping update"
                         )
                         continue
-                    c.upsert(
-                        [
-                            [pk],
-                            [e.get("user_id")],
-                            [e.get("type")],
-                            [e.get("norm_key")],
-                            [e.get("text")],
-                            [e.get("importance")],
-                            [e.get("confidence")],
-                            [new_times_seen],
-                            [e.get("status")],
-                            [e.get("source_session_id")],
-                            [e.get("created_at")],
-                            [e.get("updated_at")],
-                            [now],
-                            [original_embedding],
-                        ]
-                    )
+                    row_data = {
+                        "pk": pk,
+                        "user_id": e.get("user_id") or user_id, # <--- 關鍵修正：確保 user_id 存在
+                        "type": e.get("type"),
+                        "norm_key": e.get("norm_key"),
+                        "text": e.get("text"),
+                        "importance": e.get("importance"),
+                        "confidence": e.get("confidence"),
+                        "times_seen": new_times_seen, # 更新 times_seen
+                        "status": e.get("status"),
+                        "source_session_id": e.get("source_session_id"),
+                        "created_at": e.get("created_at"),
+                        "updated_at": e.get("updated_at"), # updated_at 維持不變
+                        "last_used_at": now, # 更新 last_used_at
+                        "embedding": original_embedding,
+                    }
+                    rows_to_update.append(row_data)
+            if rows_to_update:
+                # c.upsert 接受 list of dictionaries 作為輸入
+                c.upsert(rows_to_update)
         except Exception as ex:
             print(f"[memory usage update error] {ex}")
 
     lines = [f'- {x["row"].get("text")} ' for x in picked]
     return "⭐ 個人長期記憶：\n" + "\n".join(lines) if lines else ""
+
+
+def get_recent_memories(user_id: str, topk: int = 5, days_limit: int = 7) -> str:
+    """
+    【新函式】專為主動關懷設計。
+    不進行語意搜尋，而是直接獲取指定天數內、最新的 topk 筆記憶。
+    """
+    print(f"🔍 正在為 user_id={user_id} 檢索最近 {days_limit} 天內的記憶...")
+    c = ensure_memory_collection()
+    
+    # 1. 計算時間範圍
+    now_ts_ms = int(time.time() * 1000)
+    start_ts_ms = now_ts_ms - int(timedelta(days=days_limit).total_seconds() * 1000)
+    
+    # 2. 建立查詢表達式
+    # Milvus 的 query 功能強大，可以直接篩選 user_id 和時間範圍
+    expr = f'user_id == "{user_id}" and created_at >= {start_ts_ms}'
+    
+    try:
+        # 3. 執行查詢
+        # 為了排序，我們先取出一個稍大的數量，然後在 Python 中排序
+        # Milvus 的 query API 本身不直接支援 sort_by
+        results = c.query(
+            expr=expr,
+            output_fields=["text", "created_at"],
+            limit=100 # 取出近期最多100筆以供排序
+        )
+        
+        if not results:
+            print(f"❌ 用戶 {user_id} 在最近 {days_limit} 天內沒有可檢索的記憶。")
+            return ""
+            
+        # 4. 在 Python 端進行排序，並選取 topk
+        # 按照 created_at 降序排列 (最新的在前面)
+        sorted_results = sorted(results, key=lambda r: r['created_at'], reverse=True)
+        top_results = sorted_results[:topk]
+        
+        # 5. 格式化輸出
+        lines = [f'- {item["text"]}' for item in top_results]
+        
+        # 反轉順序，讓最早的記憶在最前面，符合對話時序
+        lines.reverse() 
+        
+        formatted_string = "\n".join(lines)
+        print(f"🧠 為用戶 {user_id} 檢索到 {len(top_results)} 筆近期記憶。")
+        return formatted_string
+        
+    except Exception as e:
+        print(f"[get_recent_memories error] 檢索近期記憶時發生錯誤: {e}")
+        return ""

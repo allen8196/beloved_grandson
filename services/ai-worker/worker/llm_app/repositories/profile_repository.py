@@ -9,16 +9,20 @@ class ProfileRepository:
     def _get_db(self) -> Session:
         return SessionLocal()
 
-    def get_or_create_by_line_id(self, line_user_id: str) -> ChatUserProfile:
+    def get_or_create_by_user_id(self, user_id: str) -> ChatUserProfile:
         """讀取 Profile，若不存在則建立一筆新的空紀錄。"""
         db = self._get_db()
         try:
-            profile = db.query(ChatUserProfile).filter(ChatUserProfile.line_user_id == line_user_id).first()
+            # 【修正】修正參數名稱混亂問題，解決 user_id is not defined 錯誤
+            profile = db.query(ChatUserProfile).filter(ChatUserProfile.user_id == user_id).first()
             if not profile:
-                print(f"[Profile Repo] 找不到 {line_user_id} 的 Profile，將建立新紀錄。")
+                print(f"[Profile Repo] 找不到 user_id={user_id} 的 Profile，將建立新紀錄。")
+                # 【修正】建立新紀錄時，由於無法獲取真實 line_user_id，暫時用 user_id 的字串代替
+                # 這可以避免執行錯誤，但長遠來看應從 web-app 傳遞真實的 line_user_id
                 profile = ChatUserProfile(
-                    line_user_id=line_user_id,
-                    last_contact_ts=func.now() # 【新增】建立時就給定初始時間
+                    user_id=user_id,
+                    line_user_id=str(user_id), # 建立時可以順便傳入
+                    last_contact_ts=func.now()
                 )
                 db.add(profile)
                 db.commit()
@@ -27,26 +31,27 @@ class ProfileRepository:
         finally:
             db.close()
 
-    def read_profile_as_dict(self, line_user_id: str) -> dict:
+    def read_profile_as_dict(self, user_id: str) -> dict:
         """讀取 Profile 並以字典格式回傳。"""
-        profile = self.get_or_create_by_line_id(line_user_id)
+        profile = self.get_or_create_by_user_id(user_id)
         return {
-            "personal_background": profile.profile_personal_background or {}, # 【修正】確保回傳的是 dict 而非 None
+            "personal_background": profile.profile_personal_background or {},
             "health_status": profile.profile_health_status or {},
             "life_events": profile.profile_life_events or {}
         }
 
-    def update_profile_facts(self, line_user_id: str, facts_to_update: dict) -> None:
+    def update_profile_facts(self, user_id: str, facts_to_update: dict) -> None:
         """根據 Profiler 產生的指令集，安全地更新 Profile。"""
         if not facts_to_update or (not facts_to_update.get('add') and not facts_to_update.get('update') and not facts_to_update.get('remove')):
-            print(f"[Profile Repo] 無任何更新指令，跳過 {line_user_id} 的 Profile 更新。")
+            # 【修正】修正日誌輸出中的變數名稱錯誤
+            print(f"[Profile Repo] 無任何更新指令，跳過 {user_id} 的 Profile 更新。")
             return
 
         db = self._get_db()
         try:
-            profile = db.query(ChatUserProfile).filter(ChatUserProfile.line_user_id == line_user_id).first()
+            profile = db.query(ChatUserProfile).filter(ChatUserProfile.user_id == user_id).first()
             if not profile:
-                print(f"[Profile Repo] 更新失敗，找不到 {line_user_id} 的 Profile。")
+                print(f"[Profile Repo] 更新失敗，找不到 user_id={user_id} 的 Profile。")
                 return
 
             # 【新增】一個旗標來追蹤是否有實際變動
@@ -103,35 +108,32 @@ class ProfileRepository:
             if is_modified:
                 profile.updated_at = func.now()
                 db.commit()
-                print(f"✅ [Profile Repo] 成功更新 {line_user_id} 的 Profile。")
+                print(f"✅ [Profile Repo] 成功更新 user_id={user_id} 的 Profile。")
             else:
-                print(f"ℹ️ [Profile Repo] {line_user_id} 的 Profile 無需變動。")
+                print(f"ℹ️ [Profile Repo] user_id={user_id} 的 Profile 無需變動。")
         finally:
             db.close()
 
-    def touch_last_contact_ts(self, line_user_id: str) -> None:
+    def touch_last_contact_ts(self, user_id: str) -> None:
         """【修正】更新最後聯絡時間，確保在同一個 session 中完成。"""
         db = self._get_db()
         try:
             # 先確保使用者存在
-            profile = db.query(ChatUserProfile).filter(ChatUserProfile.line_user_id == line_user_id).first()
+            profile = db.query(ChatUserProfile).filter(ChatUserProfile.user_id == user_id).first()
             if not profile:
                 # 如果不存在，呼叫 get_or_create 來建立。
-                # 雖然這會多一次 db 操作，但能保證資料存在。
                 # get_or_create 內部會 commit。
                 db.close() # 關閉當前 session
-                self.get_or_create_by_line_id(line_user_id)
+                self.get_or_create_by_user_id(user_id)
                 # 再次開啟 session 進行更新
                 db = self._get_db()
-                profile = db.query(ChatUserProfile).filter(ChatUserProfile.line_user_id == line_user_id).first()
+                profile = db.query(ChatUserProfile).filter(ChatUserProfile.user_id == user_id).first()
 
             # 更新時間
             profile.last_contact_ts = func.now()
             db.commit()
-            # 移除 print 以避免刷屏
-            # print(f"✅ [Profile Repo] 成功更新 {line_user_id} 的 last_contact_ts。")
         except Exception as e:
             db.rollback()
-            print(f"❌ [Profile Repo] 更新 {line_user_id} 的 last_contact_ts 失敗: {e}")
+            print(f"❌ [Profile Repo] 更新 {user_id} 的 last_contact_ts 失敗: {e}")
         finally:
             db.close()

@@ -13,6 +13,88 @@ REDIS_TTL_SECONDS = int(os.getenv("REDIS_TTL_SECONDS", 86400))
 ALERT_STREAM_KEY = os.getenv("ALERT_STREAM_KEY", "alerts:stream")
 ALERT_STREAM_GROUP = os.getenv("ALERT_STREAM_GROUP", "case_mgr")
 
+SESSION_TIMEOUT_SECONDS = 300
+
+def start_or_refresh_session(user_id: str) -> None:
+    """
+    啟動一個新 Session 或刷新既有 Session 的過期時間。
+    這將是新的 Session 管理核心。
+    """
+    r = get_redis()
+    active_key = f"session:active:{user_id}"
+    last_active_key = f"session:last_active:{user_id}"
+    
+    # 使用 pipeline 確保原子性
+    with r.pipeline() as pipe:
+        # 1. 設置或刷新活躍標記，TTL 為 5 分鐘
+        pipe.set(active_key, "1", ex=SESSION_TIMEOUT_SECONDS)
+        
+        # 2. 更新最後活躍時間戳 (永不過期，供排程任務掃描)
+        pipe.set(last_active_key, int(time.time()))
+        
+        pipe.execute()
+    
+    # 在這裡也更新 Profile 的最後聯繫時間
+    try:
+        ProfileRepository().touch_last_contact_ts(int(user_id))
+    except (ValueError, TypeError):
+        # 如果 user_id 不是一個有效的數字字串，則跳過對資料庫的操作，避免崩潰。
+        print(f"⚠️ [Session Refresh] user_id '{user_id}' 不是有效的整數，已跳過 Profile 時間戳更新。")
+    
+    print(f"🔄 Session for user {user_id} has been started/refreshed.")
+
+
+def is_session_active(user_id: str) -> bool:
+    """檢查使用者的 Session 當前是否活躍"""
+    r = get_redis()
+    return bool(r.exists(f"session:active:{user_id}"))
+
+
+def get_expired_sessions(timeout_seconds: int = SESSION_TIMEOUT_SECONDS) -> List[str]:
+    """
+    掃描所有使用者的最後活躍時間，找出已過期的 Session。
+    這是給排程任務使用的。
+    """
+    r = get_redis()
+    # 使用 SCAN 避免在大量用戶時阻塞 Redis
+    cursor = '0'
+    expired_users = []
+    now = int(time.time())
+    
+    while cursor != 0:
+        cursor, keys = r.scan(cursor=cursor, match="session:last_active:*", count=100)
+        if not keys:
+            continue
+        
+        last_active_times = r.mget(keys)
+        for i, key in enumerate(keys):
+            last_active_time = last_active_times[i]
+            if last_active_time and (now - int(last_active_time) > timeout_seconds):
+                # 檢查 active key 是否也真的消失了，雙重確認
+                user_id = key.split(':')[-1]
+                if not is_session_active(user_id):
+                    expired_users.append(user_id)
+    return expired_users
+
+def cleanup_session_keys(user_id: str) -> None:
+    """在 finalize_session 後，清除所有 session 相關的 key"""
+    r = get_redis()
+    keys_to_delete = [
+        f"session:active:{user_id}",
+        f"session:last_active:{user_id}",
+    ]
+    # 連同原有的 purge_user_session 一起刪除
+    original_keys = [
+        f"session:{user_id}:history",
+        f"session:{user_id}:summary:text",
+        f"session:{user_id}:summary:rounds",
+        f"session:{user_id}:alerts",
+        f"session:{user_id}:state",
+    ]
+    all_keys = keys_to_delete + original_keys
+    r.delete(*all_keys)
+    print(f"🧹 All session keys for user {user_id} have been cleaned up.")
+
 
 @lru_cache(maxsize=1)
 def get_redis() -> redis.Redis:
@@ -54,15 +136,8 @@ def append_round(user_id: str, round_obj: Dict) -> None:
     r = get_redis()
     key = f"session:{user_id}:history"
     r.rpush(key, json.dumps(round_obj, ensure_ascii=False))
-    ensure_active_state(user_id)
-    _touch_ttl([
-        key,
-        f"session:{user_id}:summary:text",
-        f"session:{user_id}:summary:rounds",
-        f"session:{user_id}:alerts",
-        f"session:{user_id}:state",
-    ])
-    ProfileRepository().touch_last_contact_ts(user_id)
+    # [取代] 原本的 ensure_active_state 和 _touch_ttl
+    start_or_refresh_session(user_id)
 
 # 【新增】主動關懷專用函式
 def append_proactive_round(user_id: str, round_obj: Dict) -> None:
@@ -172,19 +247,9 @@ def pop_all_alerts(user_id: str) -> List[Dict]:
 
 
 def purge_user_session(user_id: str) -> int:
-    r = get_redis()
-    keys = [
-        f"session:{user_id}:history",
-        f"session:{user_id}:summary:text",
-        f"session:{user_id}:summary:rounds",
-        f"session:{user_id}:alerts",
-        f"session:{user_id}:state",
-    ]
-    p = r.pipeline()
-    for k in keys:
-        p.delete(k)
-    res = p.execute()
-    return sum(res)
+    # 實際的刪除邏輯轉交給新的 cleanup 函式
+    cleanup_session_keys(user_id)
+    return 1 # 返回一個非零值表示執行成功
 
 
 def set_state_if(user_id: str, expect: str, to: str) -> bool:

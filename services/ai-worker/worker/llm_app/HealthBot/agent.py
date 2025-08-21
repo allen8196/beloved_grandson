@@ -23,6 +23,7 @@ from ..toolkits.redis_store import (
     peek_remaining,
     purge_user_session,
     set_state_if,
+    cleanup_session_keys
 )
 from ..toolkits.tools import (
     AlertCaseManagerTool,
@@ -63,7 +64,13 @@ def _shrink_tail(text: str, max_chars: int) -> str:
 
 def build_prompt_from_redis(user_id: str, k: int = 6, current_input: str = "") -> str:
     # 0) 取使用者Profile
-    profile_data = ProfileRepository().read_profile_as_dict(user_id)
+    profile_data = {}
+    try:
+        # 【修改】增加 try-except 保護，確保測試時使用非數字ID不會崩潰
+        profile_data = ProfileRepository().read_profile_as_dict(int(user_id))
+    except (ValueError, TypeError):
+        print(f"⚠️ [Build Prompt] user_id '{user_id}' 無法轉換為整數，將使用空的 Profile。")
+
     profile_str = json.dumps({k: v for k, v in profile_data.items() if isinstance(v, dict)}, ensure_ascii=False, indent=2) if any(profile_data.values()) else "尚無使用者畫像資訊"
     
     # 1) 取歷史摘要（控長度）
@@ -407,7 +414,7 @@ PROFILER_AGENT_PROMPT_TEMPLATE = """
 4.  **移除 (REMOVE)**: 如果新摘要明確指出某個事實已結束或失效（如聚餐已結束、症狀已痊癒），你應該移除它。
 5.  **合併與去重**: 不要重複記錄相同的事實。如果新摘要只是重複提及已知事實，更新 `last_mentioned` 日期即可。
 6.  **無變動則留空**: 如果新摘要沒有提供任何值得更新的長期事實，請回傳一個空的 JSON 物件 `{{}}`。
-7.  **絕對時間制**: 你的輸出若包含日期，皆必須使用參考今天日期(NOW)，換算為YYYY-MM-DD格式，不可使用相對時間（如下週、下個月）。
+7.  **絕對時間制**: 你的輸出若包含日期，皆**必須**使用參考當前日期 (`NOW`)，**精確地**換算為 `YYYY-MM-DD` 格式。例如，若今天是 2025-08-21 (週四)，「下週三」應換算為 `2025-08-27`。**嚴禁**使用相對時間。
 
 # OUTPUT FORMAT
 你「必須」嚴格按照以下 JSON 格式輸出一個操作指令集。這讓後端系統可以安全地執行你的決策。
@@ -428,7 +435,7 @@ PROFILER_AGENT_PROMPT_TEMPLATE = """
 
 ---
 **## 學習範例 1：新增與更新 ##**
-
+**當前時間**: 2025-08-14
 * **既有使用者畫像**:
     ```json
     {{
@@ -441,14 +448,19 @@ PROFILER_AGENT_PROMPT_TEMPLATE = """
     ```
 * **新的對話摘要**:
     "使用者情緒不錯，提到女兒美玲下週要帶孫子回來看他，感到很期待。另外，使用者再次抱怨了夜咳的狀況，但感覺比上週好一些。"
-* **你的思考**: 新摘要中，「女兒美玲」和「孫子」是新的、重要的家庭成員資訊，應新增。`夜咳` 是既有症狀，應更新 `last_mentioned` 日期。
+* **你的思考**: 新摘要中，「女兒美玲」和「孫子」是新的、重要的家庭成員資訊，應新增為personal_background的家庭資訊。女兒下週帶孫子來訪，應新增為upcoming_events，並將"下週"換算為2025-08-17~2025-08-23。`夜咳` 是既有症狀，應更新 `last_mentioned` 日期。
 * **你的輸出**:
     ```json
     {{
       "add": {{
         "personal_background": {{
           "family": {{"daughter_name": "美玲", "has_grandchild": true}}
-        }}
+        }},
+        "life_events": {{
+          "upcoming_events": [
+            {{"event_type": "family_visit", "description": "女兒美玲2025-08-17~2025-08-23帶孫子來訪", "event_date": "2025-08-17~2025-08-23"}}
+          ]
+      }}
       }},
       "update": {{
         "health_status": {{
@@ -463,13 +475,13 @@ PROFILER_AGENT_PROMPT_TEMPLATE = """
 
 ---
 **## 學習範例 2：事件結束與狀態變更 ##**
-
+**當前時間**: 2025-08-24
 * **既有使用者畫像**:
     ```json
     {{
       "life_events": {{
         "upcoming_events": [
-          {{"event_type": "family_visit", "description": "女兒美玲2025-08-17~2025-08-23帶孫子來訪", "event_date": "2025-08-22"}}
+          {{"event_type": "family_visit", "description": "女兒美玲2025-08-17~2025-08-23帶孫子來訪", "event_date": "2025-08-17~2025-08-23"}}
         ]
       }},
       "health_status": {{
@@ -540,7 +552,7 @@ def run_profiler_update(user_id: str, final_summary: str):
     repo = ProfileRepository()
     
     # 1. 獲取舊 Profile
-    old_profile = repo.read_profile_as_dict(user_id)
+    old_profile = repo.read_profile_as_dict(int(user_id))
     old_profile_str = json.dumps(old_profile, ensure_ascii=False, indent=2) if any(old_profile.values()) else "{}"
     
     # 2. 建立 Profiler Agent 並執行任務
@@ -570,6 +582,11 @@ def run_profiler_update(user_id: str, final_summary: str):
     crew_output = crew.kickoff()
     update_commands_str = crew_output.raw if crew_output else ""
     
+    # 印出 LLM 原始輸出，方便除錯
+    print(f"--- [Profiler Raw Output for user {user_id}] ---")
+    print(update_commands_str)
+    print("------------------------------------------")
+
     # 3. 解析指令並更新資料庫
     try:
         # 【新增】從 JSON 字串中提取 JSON 物件
@@ -583,7 +600,7 @@ def run_profiler_update(user_id: str, final_summary: str):
         update_commands = json.loads(json_str)
 
         if update_commands and any(update_commands.values()):
-            repo.update_profile_facts(user_id, update_commands)
+            repo.update_profile_facts(int(user_id), update_commands)
         else:
             print(f"[Profiler] LLM 為 {user_id} 回傳了空的更新指令，無需更新。")
             
@@ -600,13 +617,12 @@ def run_profiler_update(user_id: str, final_summary: str):
 def finalize_session(user_id: str) -> None:
     """
     結束會話時的完整流程：
-    1. 設置狀態為 FINALIZING
-    2. 處理剩餘未摘要的對話
-    3. 進行全量 refine 摘要
-    4. 根據最終摘要更新使用者 Profile
-    5. 清除 session 資料
+    1. 處理剩餘未摘要的對話
+    2. 進行全量 refine 摘要
+    3. 根據最終摘要更新使用者 Profile
+    4. 清除 session 資料
     """
-    set_state_if(user_id, expect="ACTIVE", to="FINALIZING")
+    print(f"--- Finalizing session for user {user_id} ---")
     start, remaining = peek_remaining(user_id)
     if remaining:
         summarize_chunk_and_commit(user_id, start_round=start, history_chunk=remaining)
@@ -615,4 +631,4 @@ def finalize_session(user_id: str) -> None:
         run_profiler_update(user_id, final_summary)
     else:
         print(f"ℹ️ 用戶 {user_id} 的會話未產生最終摘要，跳過 Profile 更新。")
-    purge_user_session(user_id)
+    cleanup_session_keys(user_id) 

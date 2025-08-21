@@ -7,6 +7,9 @@ from typing import Any, Dict
 os.environ["OTEL_SDK_DISABLED"] = "true"
 os.environ["CREWAI_TELEMETRY_OPT_OUT"] = "true"
 
+from .chat_pipeline import AgentManager, handle_user_message
+from .HealthBot.agent import finalize_session
+
 # 兼容「模組方式」與「直接腳本」兩種執行情境
 try:
     from .chat_pipeline import AgentManager, handle_user_message
@@ -20,9 +23,9 @@ class LLMService:
     """LLM 微服務接口，負責 Milvus 連接和多用戶會話管理"""
 
     def __init__(self) -> None:
+        print("🚀 Initializing a new LLMService instance...")
         self.agent_manager = AgentManager()
         self._milvus_connected = False
-        self._user_sessions: Dict[str, Any] = {}  # 為每個用戶維護獨立的 UserSession
         self._ensure_milvus_connection()
 
     def _ensure_milvus_connection(self):
@@ -41,90 +44,6 @@ class LLMService:
             print(f"⚠️  Milvus 連接失敗: {e}")
             print("長期記憶功能可能不可用")
 
-    def _get_or_create_user_session(self, user_id: str):
-        """為每個用戶創建獨立的 UserSession（5分鐘超時管理）"""
-        if user_id not in self._user_sessions:
-            try:
-                import threading
-                import time
-
-                class UserSession:
-                    """用戶會話管理類，負責閒置超時和會話結束處理"""
-
-                    def __init__(self, user_id: str, agent_manager, timeout: int = 300):
-                        self.user_id = user_id
-                        self.agent_manager = agent_manager
-                        self.timeout = timeout
-                        self.last_active_time = None
-                        self.stop_event = threading.Event()
-                        threading.Thread(target=self._watchdog, daemon=True).start()
-
-                    def update_activity(self):
-                        import time as _t
-
-                        self.last_active_time = _t.time()
-
-                    def _watchdog(self):
-                        import time as _t
-
-                        while not self.stop_event.is_set():
-                            _t.sleep(5)
-                            if self.last_active_time and (
-                                _t.time() - self.last_active_time > self.timeout
-                            ):
-                                print(f"\n⏳ 閒置超過 {self.timeout}s，開始收尾...")
-                                try:
-                                    # ---- 統一以封包路徑載入，避免相對匯入失敗 ----
-                                    current_dir = os.path.dirname(
-                                        os.path.abspath(__file__)
-                                    )  # .../llm_app
-                                    project_root = os.path.dirname(
-                                        current_dir
-                                    )  # .../worker
-                                    if project_root not in sys.path:
-                                        sys.path.insert(0, project_root)
-
-                                    agent_mod = importlib.import_module(
-                                        "llm_app.HealthBot.agent"
-                                    )
-                                    finalize_session = getattr(
-                                        agent_mod, "finalize_session", None
-                                    )
-
-                                    if finalize_session:
-                                        finalize_session(self.user_id)
-                                        self.agent_manager.release_health_agent(
-                                            self.user_id
-                                        )
-                                        print(f"✅ 用戶 {self.user_id} 會話已結束")
-                                    else:
-                                        print(
-                                            "⚠️ 找不到 finalize_session()；僅釋放 agent"
-                                        )
-                                        self.agent_manager.release_health_agent(
-                                            self.user_id
-                                        )
-
-                                except Exception as e:
-                                    print(f"⚠️  會話結束處理錯誤: {e}")
-                                    # 至少確保 agent 被釋放
-                                    try:
-                                        self.agent_manager.release_health_agent(
-                                            self.user_id
-                                        )
-                                    except Exception:
-                                        pass
-                                self.stop_event.set()
-
-                print(f"🚀 為用戶 {user_id} 創建新會話（5分鐘超時）")
-                session = UserSession(user_id, self.agent_manager, timeout=300)
-                self._user_sessions[user_id] = session
-            except Exception as e:
-                print(f"⚠️  無法為 {user_id} 創建會話: {e}")
-                print(f"錯誤詳情: {type(e).__name__}: {e}")
-                return None
-
-        return self._user_sessions.get(user_id)
 
     def generate_response(self, task_data: Dict[str, Any]) -> str:
         """生成回應（包含完整長期追蹤功能和獨立用戶會話管理）
@@ -153,13 +72,8 @@ class LLMService:
             # 確保 Milvus 連接（長期記憶功能）
             self._ensure_milvus_connection()
 
-            # 為每個用戶創建/獲取獨立會話，並更新活動時間（重置 5 分鐘計時）
-            user_session = self._get_or_create_user_session(user_id)
-            if user_session:
-                user_session.update_activity()  # 重新開始計算 5 分鐘
-                print(f"🔄 用戶 {user_id} 活動時間已更新（重置 5 分鐘計時）")
-
-            # 調用對話處理邏輯
+            # [修改] 不再創建 UserSession 物件，直接呼叫 handle_user_message
+            # Session 的刷新已在 handle_user_message -> log_session -> append_round 中完成
             response_text = handle_user_message(
                 agent_manager=self.agent_manager,
                 user_id=user_id,
@@ -171,45 +85,22 @@ class LLMService:
         except Exception as e:
             print(f"[LLMService] 發生錯誤：{e}")
             return "抱歉，無法生成回應。"
-
-    def finalize_user_session(self, user_id: str):
-        """手動結束用戶會話並整理長期記憶（一般由 UserSession 自動處理）"""
+    def finalize_user_session_now(self, user_id: str):
+        """
+        【新函式】供排程任務呼叫，立即執行指定用戶的 Session 結束流程。
+        """
+        print(f"⏳ Triggering finalization for expired session: {user_id}")
         try:
-            # ---- 統一以封包路徑載入（避免相對匯入失敗）----
-            current_dir = os.path.dirname(os.path.abspath(__file__))  # .../llm_app
-            project_root = os.path.dirname(current_dir)  # .../worker
-            if project_root not in sys.path:
-                sys.path.insert(0, project_root)
-
-            agent_mod = importlib.import_module("llm_app.HealthBot.agent")
-            finalize_session = getattr(agent_mod, "finalize_session", None)
-
-            # 停止會話監控
-            if user_id in self._user_sessions:
-                session = self._user_sessions[user_id]
-                session.stop_event.set()
-                del self._user_sessions[user_id]
-                print(f"🛑 已停止用戶 {user_id} 的會話監控")
-
             # 整理長期記憶並釋放 Agent
-            if finalize_session:
-                finalize_session(user_id)
-            else:
-                print("⚠️ 找不到 finalize_session()，僅釋放 agent")
+            finalize_session(user_id)
             self.agent_manager.release_health_agent(user_id)
-            print(f"✅ 手動結束會話：{user_id}")
+            print(f"✅ Session finalized and agent released for user: {user_id}")
         except Exception as e:
-            print(f"⚠️  會話結束處理錯誤: {e}")
+            print(f"⚠️ Error during scheduled finalization for {user_id}: {e}")
+            # 即使失敗，也要確保 agent 被釋放
+            self.agent_manager.release_health_agent(user_id)
 
-    def cleanup_all_sessions(self):
-        """清理所有用戶會話（用於服務關閉時）"""
-        for user_id in list(self._user_sessions.keys()):
-            self.finalize_user_session(user_id)
-
-    def get_active_sessions(self):
-        """獲取當前活躍的會話列表"""
-        return list(self._user_sessions.keys())
-
+llm_service_instance = LLMService()
 
 def run_interactive_test():
     """互動式測試 - 固定用戶 test_user1，測試 5 分鐘釋放功能"""
@@ -242,12 +133,11 @@ def run_interactive_test():
             task_data = {"patient_id": user_id, "text": message}
 
             print(f"\n🗣️  輸入：{message}")
-            response = llm_service.generate_response(task_data)
+            response = llm_service_instance.generate_response(task_data)
             print(f"🤖 AI 回應：{response}")
 
         except KeyboardInterrupt:
             print("\n\n🔚 收到 Ctrl+C 中斷信號，正在清理...")
-            llm_service.cleanup_all_sessions()
             print("👋 再見！")
             break
         except Exception as e:
