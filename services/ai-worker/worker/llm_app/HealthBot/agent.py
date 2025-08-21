@@ -6,7 +6,7 @@ os.environ["CREWAI_TELEMETRY_OPT_OUT"] = "true"
 
 import time
 import json
-import datetime
+from datetime import datetime
 
 from crewai import LLM, Agent, Crew, Task, Process
 from langchain_openai import ChatOpenAI
@@ -367,7 +367,7 @@ def refine_summary(user_id: str) -> None:
                 {"role": "system", "content": "你是臨床心理與健康管理顧問。"},
                 {
                     "role": "user",
-                    "content": f"整合以下多段摘要為不超過 180 字、條列式精緻摘要（每行以 • 開頭）：\n\n{comb}",
+                    "content": f"整合以下多段摘要為不超過 300 字、條列式精緻摘要（每行以 • 開頭）：\n\n{comb}",
                 },
             ],
         )
@@ -567,7 +567,8 @@ def run_profiler_update(user_id: str, final_summary: str):
         verbose=False
     )
     
-    update_commands_str = crew.kickoff()
+    crew_output = crew.kickoff()
+    update_commands_str = crew_output.raw if crew_output else ""
     
     # 3. 解析指令並更新資料庫
     try:
@@ -575,7 +576,8 @@ def run_profiler_update(user_id: str, final_summary: str):
         start_index = update_commands_str.find('{')
         end_index = update_commands_str.rfind('}') + 1
         if start_index == -1 or end_index == 0:
-            raise json.JSONDecodeError("No JSON object found in the output", update_commands_str, 0)
+            print(f"[Profiler] LLM 輸出中未找到有效的 JSON 物件，跳過更新。原始輸出: {update_commands_str}")
+            return
         
         json_str = update_commands_str[start_index:end_index]
         update_commands = json.loads(json_str)

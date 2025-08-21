@@ -32,7 +32,7 @@ from .toolkits.tools import (
     SearchMilvusTool,
     summarize_chunk_and_commit,
 )
-import datetime
+from datetime import datetime
 
 SUMMARY_CHUNK_SIZE = int(os.getenv("SUMMARY_CHUNK_SIZE", 5))
 
