@@ -1,5 +1,5 @@
 import os
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, abort
 from app.core.chat_repository import ChatRepository
 from app.core.user_repository import UserRepository
 from app.core.rabbitmq_service import get_rabbitmq_service
