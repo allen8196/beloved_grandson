@@ -232,8 +232,8 @@ def check_and_trigger_dynamic_care():
         # 尋找 last_contact_ts 在 24 小時到 24 小時 10 分鐘前的用戶
         # 使用 timezone-aware 的時間進行比較
         utc_now = datetime.utcnow()
-        time_window_start = utc_now - timedelta(minutes=55)
-        time_window_end = utc_now - timedelta(minutes=40)
+        time_window_start = utc_now - timedelta(hours=24, minutes=10)
+        time_window_end = utc_now - timedelta(hours=24)
         
         users_to_care = db.query(ChatUserProfile).filter(
             ChatUserProfile.last_contact_ts.between(time_window_start, time_window_end)
