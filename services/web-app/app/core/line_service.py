@@ -137,7 +137,8 @@ class LineService:
                 # 發布一個任務到 RabbitMQ，讓後端 worker 進行非同步處理
                 rabbitmq_service.publish_message(
                     queue_name=task_queue_name,
-                    message_body={'patient_id': user.id, 'text': event.message.text}
+                    # [修改] 將 line_user_id 一起傳遞給 worker
+                    message_body={'patient_id': user.id, 'text': event.message.text, 'line_user_id': event.source.user_id}
                 )
 
                 # 回覆使用者，告知訊息已收到並正在處理
@@ -221,7 +222,8 @@ class LineService:
                     'patient_id': user.id,
                     'object_name': object_name,
                     'bucket_name': bucket_name,
-                    'duration_ms': duration_ms # 將時長傳遞給 ai-worker
+                    'duration_ms': duration_ms, # 將時長傳遞給 ai-worker
+                    'line_user_id': event.source.user_id # 【新增】傳遞 line_user_id
                 }
                 rabbitmq_service.publish_message(
                     queue_name=task_queue_name,

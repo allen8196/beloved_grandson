@@ -33,6 +33,7 @@ from .toolkits.tools import (
     summarize_chunk_and_commit,
 )
 from datetime import datetime
+from .repositories.profile_repository import ProfileRepository # 【新增】
 
 SUMMARY_CHUNK_SIZE = int(os.getenv("SUMMARY_CHUNK_SIZE", 5))
 
@@ -55,12 +56,22 @@ class AgentManager:
             del self.health_agent_cache[user_id]
 
 
-def log_session(user_id: str, query: str, reply: str, request_id: Optional[str] = None):
+def log_session(user_id: str, query: str, reply: str, request_id: Optional[str] = None, line_user_id: str = None):
     rid = request_id or make_request_id(user_id, query)
     if not try_register_request(user_id, rid):
         # 去重，跳過重複請求
         return
     append_round(user_id, {"input": query, "output": reply, "rid": rid})
+    
+    # 【新增】更新 Profile 的最後聯絡時間
+    profile_repo = ProfileRepository()
+    try:
+        # 【修改】在呼叫 repository 時，將 user_id 轉換為整數
+        profile_repo.touch_last_contact_ts(int(user_id), line_user_id=line_user_id)
+    except (ValueError, TypeError):
+        print(f"⚠️ [Log Session] user_id '{user_id}' 不是有效的整數，跳過 Profile 時間戳更新。")
+
+
     # 嘗試抓下一段 5 輪（不足會回空）→ LLM 摘要 → CAS 提交
     start, chunk = peek_next_n(user_id, SUMMARY_CHUNK_SIZE)
     if start is not None and chunk:
@@ -99,6 +110,7 @@ def handle_user_message(
     agent_manager: AgentManager,
     user_id: str,
     query: str,
+    line_user_id: str = None, # 【新增】
     audio_id: Optional[str] = None,
     is_final: bool = True,
 ) -> str:
@@ -236,7 +248,7 @@ def handle_user_message(
                 res = (res_obj.choices[0].message.content or "").strip()
         # 5) 結果快取 + 落歷史
         set_audio_result(user_id, audio_id, res)
-        log_session(user_id, full_text, res)
+        log_session(user_id, full_text, res, line_user_id=line_user_id) # 【新增】傳遞 line_user_id
         return res
 
     finally:

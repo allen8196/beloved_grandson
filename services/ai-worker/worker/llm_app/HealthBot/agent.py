@@ -64,10 +64,17 @@ def _shrink_tail(text: str, max_chars: int) -> str:
 
 def build_prompt_from_redis(user_id: str, k: int = 6, current_input: str = "") -> str:
     # 0) 取使用者Profile
+    profile = None
     profile_data = {}
     try:
-        # 【修改】增加 try-except 保護，確保測試時使用非數字ID不會崩潰
-        profile_data = ProfileRepository().read_profile_as_dict(int(user_id))
+        # 注意：在此處的流程中，我們沒有 line_user_id，所以創建出的 profile 中 line_user_id 會是 NULL
+        # 但只要使用者發送下一條訊息，touch_last_contact_ts 就會把它補充進去
+        profile = ProfileRepository().get_or_create_by_user_id(int(user_id))
+        profile_data = {
+            "personal_background": profile.profile_personal_background or {},
+            "health_status": profile.profile_health_status or {},
+            "life_events": profile.profile_life_events or {}
+        }
     except (ValueError, TypeError):
         print(f"⚠️ [Build Prompt] user_id '{user_id}' 無法轉換為整數，將使用空的 Profile。")
 

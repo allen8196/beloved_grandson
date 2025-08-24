@@ -59,6 +59,7 @@ class LLMService:
         user_id = str(
             task_data.get("patient_id") or task_data.get("user_id") or "unknown_user"
         )
+        line_user_id = task_data.get("line_user_id") # 【新增】讀取 line_user_id
         query = str(task_data.get("text") or "").strip()
         audio_id = None
         # 優先使用 object_name 當 audio_id；若沒有且為純文字則由流程自動以 hash 產生
@@ -77,6 +78,7 @@ class LLMService:
             response_text = handle_user_message(
                 agent_manager=self.agent_manager,
                 user_id=user_id,
+                line_user_id=line_user_id, # 【新增】傳遞 line_user_id
                 query=query,
                 audio_id=audio_id,
                 is_final=True,
