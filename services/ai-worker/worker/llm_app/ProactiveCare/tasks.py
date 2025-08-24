@@ -1,6 +1,7 @@
 import json
 import os
 import time
+import pytz
 from datetime import datetime, timedelta # 【新增】導入 timedelta
 
 from crewai import Agent, Crew, Task
@@ -19,6 +20,7 @@ from ..llm_service import llm_service_instance
 load_dotenv()
 
 # --- 初始化 ---
+TAIPEI_TZ = pytz.timezone("Asia/Taipei")
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
 guardrail_agent = create_guardrail_agent()
@@ -88,12 +90,10 @@ def get_proactive_care_prompt_template() -> str:
 * **使用者畫像**:
     ```json
     {{
-      "personal_background": {{
-        "family": {{"son_name": "志明", "has_grandchild": true}}
-      }},
+      "personal_background": {{ "family": {{ "son_name": "志明", "has_grandchild": true }} }},
       "life_events": {{
         "upcoming_events": [
-          {{"event_type": "family_visit", "description": "兒子志明要帶孫子來家裡吃飯", "event_date": "2025-08-14"}}
+          {{ "event_type": "family_visit", "description": "兒子志明要帶孫子來家裡吃飯", "event_date": "2025-08-14" }}
         ]
       }}
     }}
@@ -224,17 +224,22 @@ def execute_proactive_care(profile_repo: ProfileRepository, user: object):
 
 
 def check_and_trigger_dynamic_care():
-    """每 10 分鐘執行一次，檢查閒置超過 24 小時的使用者。"""
-    print(f"\n[動態任務] {datetime.now()} 開始檢查 24 小時閒置使用者...")
+    """每 10 分鐘執行一次，檢查閒置超過特定時間的使用者。"""
+    print(f"\n[動態任務] {datetime.now(TAIPEI_TZ)} 開始檢查閒置使用者...")
     repo = ProfileRepository()
     db = repo._get_db()
     try:
-        # 尋找 last_contact_ts 在 24 小時到 24 小時 10 分鐘前的用戶
-        # 使用 timezone-aware 的時間進行比較
-        utc_now = datetime.utcnow()
-        time_window_start = utc_now - timedelta(hours=24, minutes=10)
-        time_window_end = utc_now - timedelta(hours=24)
+        # 【修正】統一使用 timezone-aware 的 UTC 時間進行所有計算
+        now_utc = datetime.now(pytz.utc)
+
+        # 測試用的時間窗口 (2-3 小時前)
+        time_window_start = now_utc - timedelta(hours=4)
+        time_window_end = now_utc - timedelta(hours=2)
         
+        # 正式環境的時間窗口 (24 小時 ~ 24 小時 10 分鐘前)
+        # time_window_start = now_utc - timedelta(hours=24, minutes=10)
+        # time_window_end = now_utc - timedelta(hours=24)
+
         users_to_care = db.query(ChatUserProfile).filter(
             ChatUserProfile.last_contact_ts.between(time_window_start, time_window_end)
         ).all()
@@ -248,11 +253,15 @@ def check_and_trigger_dynamic_care():
 
 def patrol_silent_users():
     """每週一早上 9 點執行，找出超過 7 天未互動的使用者。"""
-    print(f"\n[巡檢任務] {datetime.now()} 開始尋找長期沉默使用者...")
+    print(f"\n[巡檢任務] {datetime.now(TAIPEI_TZ)} 開始尋找長期沉默使用者...")
     repo = ProfileRepository()
     db = repo._get_db()
     try:
-        seven_days_ago = datetime.utcnow() - timedelta(days=7)
+        # 【修正】統一使用 timezone-aware 的 UTC 時間
+        now_utc = datetime.now(pytz.utc)
+        seven_days_ago = now_utc - timedelta(days=7)
+        
+        # 【修正】查詢邏輯，確保與 aware timestamp 正確比較
         users_to_care = db.query(ChatUserProfile).filter(
             (ChatUserProfile.last_contact_ts == None) | (ChatUserProfile.last_contact_ts < seven_days_ago)
         ).all()

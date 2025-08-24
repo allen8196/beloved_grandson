@@ -16,7 +16,7 @@ redis_jobstore = RedisJobStore(
     db=1,
 )
 
-scheduler = BackgroundScheduler(jobstores={"default": redis_jobstore}, timezone=TAIPEI_TZ)
+scheduler = BackgroundScheduler(jobstores={"default": redis_jobstore}, timezone=pytz.utc)
 
 def initialize_scheduler():
     """
