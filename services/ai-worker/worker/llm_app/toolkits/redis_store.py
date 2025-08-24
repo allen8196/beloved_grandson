@@ -15,15 +15,18 @@ ALERT_STREAM_GROUP = os.getenv("ALERT_STREAM_GROUP", "case_mgr")
 
 SESSION_TIMEOUT_SECONDS = 300
 
-def start_or_refresh_session(user_id: str) -> None:
+def start_or_refresh_session(user_id: str, line_user_id: str = None) -> None:
     """
     啟動一個新 Session 或刷新既有 Session 的過期時間。
-    這將是新的 Session 管理核心。
+    只有在 Session 是新啟動時，才會更新資料庫的 last_contact_ts。
     """
     r = get_redis()
     active_key = f"session:active:{user_id}"
     last_active_key = f"session:last_active:{user_id}"
-    
+
+    # 檢查是否為新 Session
+    is_new_session = not r.exists(active_key)
+
     # 使用 pipeline 確保原子性
     with r.pipeline() as pipe:
         # 1. 設置或刷新活躍標記，TTL 為 5 分鐘
@@ -33,15 +36,22 @@ def start_or_refresh_session(user_id: str) -> None:
         pipe.set(last_active_key, int(time.time()))
         
         pipe.execute()
+
+    # 如果是新 Session，才更新 Profile 的最後聯繫時間
+    if is_new_session:
+        try:
+            repo = ProfileRepository()
+            # 【新增】只有在 line_user_id 有效時才傳遞，避免用 None 覆蓋舊值
+            if line_user_id:
+                repo.touch_last_contact_ts(int(user_id), line_user_id=line_user_id)
+            else:
+                repo.touch_last_contact_ts(int(user_id))
+            print(f"✨ New session for user {user_id}. 'last_contact_ts' updated.")
+        except (ValueError, TypeError):
+            # 如果 user_id 不是一個有效的數字字串，則跳過對資料庫的操作，避免崩潰。
+            print(f"⚠️ [Session Start] user_id '{user_id}' 不是有效的整數，已跳過 Profile 時間戳更新。")
     
-    # 在這裡也更新 Profile 的最後聯繫時間
-    try:
-        ProfileRepository().touch_last_contact_ts(int(user_id))
-    except (ValueError, TypeError):
-        # 如果 user_id 不是一個有效的數字字串，則跳過對資料庫的操作，避免崩潰。
-        print(f"⚠️ [Session Refresh] user_id '{user_id}' 不是有效的整數，已跳過 Profile 時間戳更新。")
-    
-    print(f"🔄 Session for user {user_id} has been started/refreshed.")
+    print(f"🔄 Session for user {user_id} has been {'started' if is_new_session else 'refreshed'}.")
 
 
 def is_session_active(user_id: str) -> bool:
@@ -132,12 +142,12 @@ def make_request_id(user_id: str, text: str, now_ms: Optional[int] = None) -> st
     return hashlib.sha1(f"{user_id}|{text}|{bucket}".encode()).hexdigest()
 
 
-def append_round(user_id: str, round_obj: Dict) -> None:
+def append_round(user_id: str, round_obj: Dict, line_user_id: str = None) -> None:
     r = get_redis()
     key = f"session:{user_id}:history"
     r.rpush(key, json.dumps(round_obj, ensure_ascii=False))
     # [取代] 原本的 ensure_active_state 和 _touch_ttl
-    start_or_refresh_session(user_id)
+    start_or_refresh_session(user_id, line_user_id=line_user_id)
 
 # 【新增】主動關懷專用函式
 def append_proactive_round(user_id: str, round_obj: Dict) -> None:

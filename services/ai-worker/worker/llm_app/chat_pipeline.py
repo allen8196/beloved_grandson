@@ -61,16 +61,8 @@ def log_session(user_id: str, query: str, reply: str, request_id: Optional[str] 
     if not try_register_request(user_id, rid):
         # 去重，跳過重複請求
         return
-    append_round(user_id, {"input": query, "output": reply, "rid": rid})
-    
-    # 【新增】更新 Profile 的最後聯絡時間
-    profile_repo = ProfileRepository()
-    try:
-        # 【修改】在呼叫 repository 時，將 user_id 轉換為整數
-        profile_repo.touch_last_contact_ts(int(user_id), line_user_id=line_user_id)
-    except (ValueError, TypeError):
-        print(f"⚠️ [Log Session] user_id '{user_id}' 不是有效的整數，跳過 Profile 時間戳更新。")
-
+    # 將 line_user_id 傳遞給 append_round，由 redis_store 統一處理 session 和時間戳更新
+    append_round(user_id, {"input": query, "output": reply, "rid": rid}, line_user_id=line_user_id)
 
     # 嘗試抓下一段 5 輪（不足會回空）→ LLM 摘要 → CAS 提交
     start, chunk = peek_next_n(user_id, SUMMARY_CHUNK_SIZE)
