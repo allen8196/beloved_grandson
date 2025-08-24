@@ -168,7 +168,7 @@ def handle_user_message(
                 ctx = ""  # 不檢索記憶
                 print("⚠️ 因安全檢查攔截，跳過記憶檢索")
             else:
-                ctx = build_prompt_from_redis(user_id, k=6, current_input=full_text)
+                ctx = build_prompt_from_redis(user_id, line_user_id=line_user_id, k=6, current_input=full_text)
             task_description = COMPANION_PROMPT_TEMPLATE.format(
                 now=now_str,
                 ctx=ctx or "無", # 確保 ctx 不是空字串

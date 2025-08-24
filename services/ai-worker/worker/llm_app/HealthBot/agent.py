@@ -62,14 +62,13 @@ def _shrink_tail(text: str, max_chars: int) -> str:
     return tail[idx:] if idx != -1 else tail
 
 
-def build_prompt_from_redis(user_id: str, k: int = 6, current_input: str = "") -> str:
+def build_prompt_from_redis(user_id: str, line_user_id: str = None, k: int = 6, current_input: str = "") -> str:
     # 0) 取使用者Profile
     profile = None
     profile_data = {}
     try:
-        # 注意：在此處的流程中，我們沒有 line_user_id，所以創建出的 profile 中 line_user_id 會是 NULL
-        # 但只要使用者發送下一條訊息，touch_last_contact_ts 就會把它補充進去
-        profile = ProfileRepository().get_or_create_by_user_id(int(user_id))
+        #【修正】將 line_user_id 傳遞進去
+        profile = ProfileRepository().get_or_create_by_user_id(int(user_id), line_user_id=line_user_id)
         profile_data = {
             "personal_background": profile.profile_personal_background or {},
             "health_status": profile.profile_health_status or {},
