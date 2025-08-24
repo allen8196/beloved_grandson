@@ -116,8 +116,20 @@ class ProfileRepository:
         """【修正】更新最後聯絡時間，確保在同一個 session 中完成。"""
         db = self._get_db()
         try:
-            # 直接呼叫 get_or_create，它會處理創建或查找
-            profile = self.get_or_create_by_user_id(user_id, line_user_id=line_user_id)
+            # 【修正】直接在此 session 中查詢，避免建立新 session
+            profile = db.query(ChatUserProfile).filter(ChatUserProfile.user_id == int(user_id)).first()
+
+            # 如果使用者不存在，理論上應該在之前的流程被建立，但此處做個保險
+            if not profile:
+                print(f"DEBUG: Profile for user {user_id} not found, creating it.")
+                profile = ChatUserProfile(
+                    user_id=int(user_id),
+                    line_user_id=line_user_id,
+                )
+                db.add(profile)
+            
+            print(f"DEBUG: Profile for user {user_id} found/created. Current last_contact_ts: {profile.last_contact_ts}")
+            
             # 更新時間
             profile.last_contact_ts = func.now()
             db.commit()
